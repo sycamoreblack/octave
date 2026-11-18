@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { Input } from '../engine/input'
 import { AudioEngine } from '../engine/audio'
 import { World, QUALITY, type ShardNode } from '../world/world'
-import { SHARD_COUNT, type WorldSpec } from '../world/spec'
+import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, type WorldSpec } from '../world/spec'
+import type { Waystone } from '../world/objectives'
 import { pluralize } from '../story/narrator'
 import { Player } from './player'
 import { FollowCamera } from './camera'
@@ -23,6 +24,8 @@ type Target =
   | { kind: 'shard'; node: ShardNode }
   | { kind: 'wanderer'; index: number }
   | { kind: 'heart' }
+  | { kind: 'stone'; node: ShardNode; stone: Waystone; id: string }
+  | { kind: 'item'; index: number }
 
 const DIRS = [
   'north',
@@ -42,6 +45,7 @@ function compassWord(dx: number, dz: number): string {
 
 /** "The Harvest Bell" → "the Harvest Bell", for use mid-sentence. */
 const mid = (s: string): string => s.replace(/^The /, 'the ')
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 
 function wrap(a: number): number {
   return Math.atan2(Math.sin(a), Math.cos(a))
@@ -153,6 +157,14 @@ export class Game {
       node.beacon.gem.visible = false
       this.lightPedestal(i, true)
     }
+    for (const node of this.world.shards) {
+      node.stones.forEach((stone, k) => {
+        if (p.stones.includes(`${node.index}-${k}`)) stone.wake(true)
+      })
+      if (node.collected || node.stones.every((s) => s.awake)) node.seal.break(true)
+    }
+    for (const i of p.found) this.world.items[i]?.take(true)
+    for (const i of p.echoes) this.world.echoes[i]?.take(true)
     for (const place of this.world.places)
       if (p.discovered.includes(place.name)) place.discovered = true
     for (const i of p.met) if (this.world.wanderers[i]) this.world.wanderers[i].met = true
@@ -300,8 +312,16 @@ export class Game {
     } else {
       const canvas = document.getElementById('map-canvas') as HTMLCanvasElement
       document.getElementById('map-title')!.textContent =
-        `${this.spec.name} — ${Math.round(this.map.exploredFraction * 100)}% explored`
-      this.map.draw(canvas, this.player.position, this.player.facing, this.progress.met)
+        `${this.spec.name} — ${Math.round(this.map.exploredFraction * 100)}% explored · ${this.progress.echoes.length}/${ECHO_COUNT} echoes`
+      const pins = this.world.items
+        .map((it, i) => ({ it, i }))
+        .filter(({ it, i }) => !it.taken && this.progress.asked.includes(i))
+        .map(({ it, i }) => ({
+          x: it.at.x,
+          z: it.at.z,
+          label: this.spec.story.quests[i]?.item ?? ''
+        }))
+      this.map.draw(canvas, this.player.position, this.player.facing, this.progress.met, pins)
       document.getElementById('map')!.classList.remove('hidden')
     }
   }
@@ -365,6 +385,24 @@ export class Game {
         bestD = d
       }
     }
+    for (const node of this.world.shards) {
+      node.stones.forEach((stone, k) => {
+        if (stone.awake) return
+        const d = Math.hypot(stone.at.x - p.x, stone.at.z - p.z)
+        if (d < 3.4 && d < bestD) {
+          best = { kind: 'stone', node, stone, id: `${node.index}-${k}` }
+          bestD = d
+        }
+      })
+    }
+    this.world.items.forEach((item, i) => {
+      if (item.taken) return
+      const d = Math.hypot(item.at.x - p.x, item.at.z - p.z)
+      if (d < 3 && d < bestD) {
+        best = { kind: 'item', index: i }
+        bestD = d
+      }
+    })
     const h = this.world.heart.center
     if (!this.progress.restored && !this.finale && Math.hypot(h.x - p.x, h.z - p.z) < 13) {
       if (!best) best = { kind: 'heart' }
@@ -380,8 +418,16 @@ export class Game {
   private hintFor(t: Target | null): string {
     if (!t || this.talking) return ''
     const key = '<kbd>E</kbd>'
-    if (t.kind === 'shard')
+    if (t.kind === 'shard') {
+      if (t.node.seal.sealed) {
+        const awake = t.node.stones.filter((s) => s.awake).length
+        return `Sealed. Wake the waystones nearby (${awake}/${t.node.stones.length})`
+      }
       return `${key} Take ${esc(mid(this.spec.story.shards[t.node.index].name))}`
+    }
+    if (t.kind === 'stone') return `${key} Wake the waystone`
+    if (t.kind === 'item')
+      return `${key} Pick up ${esc(this.spec.story.quests[t.index]?.item ?? 'something')}`
     if (t.kind === 'wanderer')
       return `${key} Talk to ${esc(this.world.wanderers[t.index].story.name)}`
     const have = this.progress.collected.length
@@ -396,19 +442,25 @@ export class Game {
     const t = this.target
     if (this.talking) return this.advanceTalk()
     if (!t) return
-    if (t.kind === 'shard') this.startCollect(t.node)
+    if (t.kind === 'shard') {
+      if (t.node.seal.sealed)
+        this.hud.toast('A shimmering seal holds it fast. Look for the waystones around this place.')
+      else this.startCollect(t.node)
+    } else if (t.kind === 'stone') this.wakeStone(t.node, t.stone, t.id)
+    else if (t.kind === 'item') this.takeItem(t.index)
     else if (t.kind === 'wanderer') this.startTalk(t.index)
     else if (this.progress.collected.length >= SHARD_COUNT) this.startFinale()
   }
 
   private startTalk(index: number): void {
     const w = this.world.wanderers[index]
-    const lines = [...w.story.lines, this.hintLine(w.position)]
     const first = !w.met
-    // Returning visitors skip straight to the advice.
-    const start = first ? 0 : Math.max(0, lines.length - 1)
-    this.talking = { index, line: start, lines }
-    this.hud.showDialogue(w.story.name, w.story.epithet, lines[start])
+    const lines: string[] = first ? [...w.story.lines] : []
+    const request = this.requestLine(index)
+    if (request) lines.push(request)
+    lines.push(this.hintLine(w.position))
+    this.talking = { index, line: 0, lines }
+    this.hud.showDialogue(w.story.name, w.story.epithet, lines[0])
     this.audio.blip()
     if (first) {
       w.met = true
@@ -420,6 +472,106 @@ export class Game {
       })
       this.hud.toast(`Met <b>${esc(w.story.name)}</b>. Their words are in your journal.`)
     }
+    this.save()
+  }
+
+  /** What a wanderer says about the thing they lost, advancing the request as a side effect. */
+  private requestLine(index: number): string | null {
+    const q = this.spec.story.quests[index]
+    const place = this.spec.story.places[index]?.name
+    if (!q || !place || index >= QUEST_COUNT) return null
+    const fill = (s: string): string => s.replace(/\{place\}/g, place)
+    const w = this.world.wanderers[index]
+    const p = this.progress
+    if (p.returned.includes(index))
+      return `Thank you again for ${q.item}. I keep checking it's still there.`
+    if (p.found.includes(index)) {
+      p.returned.push(index)
+      if (!p.asked.includes(index)) p.asked.push(index)
+      this.audio.chime()
+      this.addJournal({
+        kind: 'request',
+        title: `${cap(q.item)}, returned to ${w.story.name}`,
+        text: fill(q.thanks)
+      })
+      this.giveReward(w.story.name)
+      this.updateCarry()
+      return fill(q.thanks)
+    }
+    if (!p.asked.includes(index)) {
+      p.asked.push(index)
+      this.addJournal({
+        kind: 'request',
+        title: `${w.story.name} lost ${q.item}`,
+        text: fill(q.ask)
+      })
+      this.hud.toast(
+        `<b>${esc(w.story.name)}</b> lost ${esc(q.item)} near <b>${esc(place)}</b>. It's marked on your map.`
+      )
+      return fill(q.ask)
+    }
+    return `Any luck near ${place}? It's ${q.item}. You'll know it when you see it… I hope.`
+  }
+
+  /** A returned favour: the wanderer marks somewhere you haven't been on your map. */
+  private giveReward(name: string): void {
+    const p = this.player.position
+    const shardTargets = this.world.shards
+      .filter((s) => !s.collected && !this.world.places[s.index]?.discovered)
+      .map((s) => ({ at: s.at, name: this.spec.story.shards[s.index].place }))
+    const minorTargets = this.world.places
+      .filter((pl) => pl.kind === 'minor' && !pl.discovered)
+      .map((pl) => ({ at: pl.at, name: pl.name }))
+    const pool = shardTargets.length ? shardTargets : minorTargets
+    if (!pool.length) return
+    const best = pool.reduce((a, b) => (a.at.distanceTo(p) < b.at.distanceTo(p) ? a : b))
+    this.map.reveal(best.at.x, best.at.z, 140)
+    this.progress.explored = this.map.serialize()
+    this.hud.toast(
+      `<b>${esc(name)}</b> marked <b>${esc(best.name)}</b> on your map. Press <b>M</b> to look.`
+    )
+  }
+
+  private wakeStone(node: ShardNode, stone: Waystone, id: string): void {
+    stone.wake()
+    if (!this.progress.stones.includes(id)) this.progress.stones.push(id)
+    const awake = node.stones.filter((s) => s.awake).length
+    this.audio.wake(awake)
+    if (awake >= node.stones.length) {
+      node.seal.break()
+      this.audio.chime()
+      this.hud.toast(
+        `The seal around <b>${esc(mid(this.spec.story.shards[node.index].name))}</b> breaks.`
+      )
+    } else {
+      this.hud.toast(`A waystone wakes (${awake}/${node.stones.length}).`)
+    }
+    this.save()
+  }
+
+  private takeItem(index: number): void {
+    const item = this.world.items[index]
+    const q = this.spec.story.quests[index]
+    if (!item || item.taken || !q) return
+    item.take()
+    this.progress.found.push(index)
+    this.audio.discover()
+    const w = this.world.wanderers[index]
+    this.hud.toast(
+      this.progress.asked.includes(index)
+        ? `You found ${esc(q.item)}. <b>${esc(w.story.name)}</b> will be glad.`
+        : `You found ${esc(q.item)}. Someone must be missing it.`
+    )
+    this.updateCarry()
+    this.save()
+  }
+
+  private updateCarry(): void {
+    const carrying = this.progress.found
+      .filter((i) => !this.progress.returned.includes(i))
+      .map((i) => this.spec.story.quests[i]?.item)
+      .filter(Boolean)
+    this.hud.setCarry(carrying.length ? `Carrying ${carrying.join(', ')}` : '')
   }
 
   private advanceTalk(): void {
@@ -553,11 +705,20 @@ export class Game {
       <div><b>${found}/${this.world.places.length}</b>places found</div>
       <div><b>${Math.round(this.map.exploredFraction * 100)}%</b>explored</div>
       <div><b>${this.progress.met.length}/${this.world.wanderers.length}</b>wanderers met</div>
+      <div><b>${this.progress.returned.length}/${QUEST_COUNT}</b>lost things returned</div>
+      <div><b>${this.progress.echoes.length}/${ECHO_COUNT}</b>echoes heard</div>
     </div>`
+    // Each wanderer you helped gets a line about how their story ends.
+    const fates = this.progress.returned
+      .slice()
+      .sort()
+      .map((i) => s.quests[i]?.after.replace(/\{place\}/g, s.places[i]?.name ?? ''))
+      .filter((x): x is string => !!x)
+    const epilogue = [s.epilogue[0], ...fates, ...s.epilogue.slice(1)].filter(Boolean)
     const choice = await this.hud.showCard({
       kicker: 'Epilogue',
       title: s.title,
-      paragraphs: s.epilogue,
+      paragraphs: epilogue,
       statsHtml: stats,
       actions: [
         { label: 'Keep exploring', primary: true, value: 'stay' },
@@ -575,6 +736,18 @@ export class Game {
 
   private checkDiscoveries(): void {
     const p = this.player.position
+    this.world.echoes.forEach((echo, i) => {
+      if (echo.taken) return
+      if (Math.hypot(echo.at.x - p.x, echo.at.z - p.z) > 2.6 || Math.abs(echo.at.y - p.y) > 4)
+        return
+      echo.take()
+      this.progress.echoes.push(i)
+      const line = this.spec.story.echoes[i] ?? ''
+      this.audio.echo()
+      this.hud.toast(`<i>“${esc(line)}”</i> <b>${this.progress.echoes.length}/${ECHO_COUNT}</b>`)
+      this.addJournal({ kind: 'echo', title: `Echo ${this.progress.echoes.length}`, text: line })
+      this.save()
+    })
     for (const place of this.world.places) {
       if (place.discovered) continue
       if (Math.hypot(place.at.x - p.x, place.at.z - p.z) > place.radius) continue
@@ -634,6 +807,25 @@ export class Game {
         distance: Math.hypot(h.x - p.x, h.z - p.z)
       })
     }
+    const bearing = (x: number, z: number): number => rel(Math.atan2(x - p.x, z - p.z))
+    for (const s of this.world.shards) {
+      if (s.collected || !s.seal.sealed) continue
+      for (const st of s.stones) {
+        const d = Math.hypot(st.at.x - p.x, st.at.z - p.z)
+        if (!st.awake && d < 90 && d > 3)
+          marks.push({ angle: bearing(st.at.x, st.at.z), kind: 'stone', distance: d })
+      }
+    }
+    this.world.items.forEach((it, i) => {
+      if (it.taken || !this.progress.asked.includes(i)) return
+      const d = Math.hypot(it.at.x - p.x, it.at.z - p.z)
+      marks.push({ angle: bearing(it.at.x, it.at.z), kind: 'item', distance: d })
+    })
+    for (const e of this.world.echoes) {
+      if (e.taken) continue
+      const d = Math.hypot(e.at.x - p.x, e.at.z - p.z)
+      if (d < 55 && d > 3) marks.push({ angle: bearing(e.at.x, e.at.z), kind: 'echo' })
+    }
     for (const w of this.world.wanderers) {
       const d = Math.hypot(w.position.x - p.x, w.position.z - p.z)
       if (d < 140 && d > 5)
@@ -646,6 +838,7 @@ export class Game {
   }
 
   private updateObjective(): void {
+    this.updateCarry()
     const s = this.spec.story
     const n = this.progress.collected.length
     if (this.progress.restored)
@@ -700,6 +893,9 @@ export class Game {
       shards: this.world.shards.map((s) => ({ at: s.at.toArray(), collected: s.collected })),
       heart: this.world.heart.center.toArray(),
       wanderers: this.world.wanderers.map((w) => w.position.toArray()),
+      stones: this.world.shards.map((s) => s.stones.map((w) => w.at.toArray())),
+      items: this.world.items.map((it) => it.at.toArray()),
+      echoes: this.world.echoes.map((e) => e.at.toArray()),
       liquidY: this.world.terrain.liquidY,
       colliders: this.world.colliders.count,
       teleport: (x: number, z: number) => this.player.place(x, z, this.player.facing)

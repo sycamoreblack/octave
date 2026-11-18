@@ -422,6 +422,26 @@ textarea::placeholder {
   border: 2px solid #fff;
   box-shadow: 0 0 10px #fff;
 }
+.cmark.stone {
+  width: 6px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--ink);
+  box-shadow: 0 0 6px var(--accent);
+}
+.cmark.item {
+  width: 9px;
+  height: 9px;
+  background: #ffe7b0;
+  border-radius: 2px;
+}
+.cmark.echo {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px #fff;
+}
 .cmark.person {
   width: 7px;
   height: 7px;
@@ -437,6 +457,20 @@ textarea::placeholder {
   color: var(--ink-dim);
 }
 
+#carry {
+  position: absolute;
+  top: calc(max(14px, env(safe-area-inset-top)) + 66px);
+  left: 50%;
+  transform: translateX(-50%);
+  font: 500 12px/1 var(--sans);
+  letter-spacing: 0.04em;
+  color: #ffe7b0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
 #objective {
   position: absolute;
   top: calc(max(14px, env(safe-area-inset-top)) + 42px);

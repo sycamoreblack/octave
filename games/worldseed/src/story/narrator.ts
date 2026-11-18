@@ -1,6 +1,7 @@
 import { Rng } from '../engine/rng'
 import type { Biome, Mood, Story, Structure, Weather, WorldSpec } from '../world/spec'
-import { SHARD_COUNT } from '../world/spec'
+import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT } from '../world/spec'
+import type { QuestStory } from '../world/spec'
 
 /**
  * The offline storyteller. It builds the narrative from grammar tables keyed by biome,
@@ -282,15 +283,129 @@ const EPITHETS = [
   'collector of forgotten names'
 ]
 
-const PERSONAL = [
-  'I am looking for my sister. She went to see the light and did not come back. I am sure she is fine.',
-  'I write down every name I hear, so the land can have them back someday.',
-  'I used to know a song about this place. Only the last line is left: "and the light came home."',
-  'My feet know these paths better than I do. I just follow them now.',
-  'I once tried to carry one of the pieces. It was so heavy with memory I had to set it down.',
-  'I am not lost. I am simply between places, and have been for a very long time.',
-  'If you see a red ribbon tied to a stone, that was me. I mark the places that still remember.'
+/** Things wanderers lose. `{place}` and `{name}` are filled in later. */
+const QUESTS: QuestStory[] = [
+  {
+    item: 'a lantern glass',
+    ask: "I dropped the glass from my lantern somewhere near {place}. Without it the flame won't hold in the wind. If your feet take you that way…",
+    thanks:
+      "Not even cracked! The flame will hold now. Here — I've walked every road in this land. Let me mark one for you.",
+    after: "{name}'s lantern burns steady, and nobody walks home in the dark."
+  },
+  {
+    item: 'a bundle of letters',
+    ask: "I left my letters under a stone at {place}, meaning to come back for them. I never did. I'm not sure I could bear to read them alone.",
+    thanks:
+      "They're all here. Every one. I'll read them tonight, slowly. Thank you — and here, I know where one of your lights is hiding.",
+    after:
+      '{name} reads old letters aloud by the fire, and laughs at the parts nobody else understands.'
+  },
+  {
+    item: 'a little carved bird',
+    ask: 'My brother carved me a wooden bird when we were small. I lost it near {place}. It is a silly thing to miss so much.',
+    thanks:
+      'Oh. Oh, look at it. Its wing is still chipped where I dropped it the first time. Let me show you something on your map in return.',
+    after:
+      '{name} keeps the wooden bird on a string around their neck, and talks to it when nobody is looking.'
+  },
+  {
+    item: 'a tin music box',
+    ask: 'There is a music box somewhere around {place}. It plays the only song I still remember all the way through.',
+    thanks:
+      "Listen — it still plays. Just. That's the one. Here, let me mark the way to somewhere you haven't been.",
+    after:
+      "{name}'s music box plays every evening, and the wanderers have started learning the words."
+  },
+  {
+    item: 'a red ribbon',
+    ask: 'I tie red ribbons to the places that still remember. I lost my last one at {place}, and now I have nothing to mark them with.',
+    thanks:
+      "A ribbon for the next place that remembers. I know one you haven't found yet — I'll mark it for you.",
+    after: '{name} ties red ribbons everywhere now. There are so many places that remember.'
+  },
+  {
+    item: 'a brass compass',
+    ask: "My compass doesn't point north — it points home. I set it down at {place} and walked off without it. Typical.",
+    thanks:
+      "There — still pointing home. It's pointing at you a bit too, which is strange. Here, I'll mark your map.",
+    after: "{name}'s compass finally points somewhere new, and they've decided to follow it."
+  },
+  {
+    item: 'a pouch of seeds',
+    ask: 'I was carrying seeds from before — real ones, from the old gardens. The pouch tore at {place}. Please, if you find it…',
+    thanks:
+      "Still dry. Still alive, I think. When this is over I'll plant them all. Let me mark something on your map.",
+    after: '{name} plants the old seeds in rows, and the first green shoots are already up.'
+  },
+  {
+    item: 'a folded map',
+    ask: 'My map. The roads on it are all wrong now, but they were my roads. I last had it around {place}.',
+    thanks: "My roads. Thank you. Here — one road that's still right. I'll draw it on yours.",
+    after: '{name} is drawing a new map, and every road on it is named after someone they met.'
+  }
 ]
+
+const ECHOES = [
+  "A child's laugh, carried on the wind from a day nobody remembers.",
+  '{people} singing, off-key and happy, somewhere just over the hill.',
+  "The smell of bread, and a voice: 'Come in, come in, you're letting the cold out.'",
+  'Someone on a rooftop, counting the lights of {world}: one, two, three, four…',
+  "A promise, whispered: 'When it's whole again, we'll meet here.'",
+  'The weight of {relic} in two small hands, held up to the sky for the first time.',
+  "Rain on a roof, and someone who didn't want the night to end.",
+  'An argument about the best way home. Both of them were wrong. Both of them got there.',
+  'Footsteps running toward something, not away.',
+  '{name} trying to teach a dog to sit. The dog never learned. Nobody minded.',
+  "A wedding under the open sky. Everyone cried, even the ones who said they wouldn't.",
+  "The last thing someone said before the dark came: 'Leave the door open.'",
+  'Bells, far away, ringing for no reason but joy.',
+  'A map drawn by candlelight, every road named after a friend.',
+  'Two old friends, not speaking, just watching the light change.',
+  'A song with no words that everybody knew.',
+  '{name}, very small, asking where the world ends. Nobody had a good answer.',
+  'A market day: too many voices, too much colour, nobody in a hurry.',
+  'Somebody planting a tree they knew they would never sit under.',
+  'A lullaby, half-remembered, the last line hummed because the words were lost.'
+]
+
+const BIOME_ECHOES: Record<Biome, string[]> = {
+  meadow: [
+    'The first hay of summer, and everyone sneezing at once.',
+    'A kite stuck in a tree for three whole days.'
+  ],
+  forest: [
+    'A tree being told its name for the very first time. It seemed pleased.',
+    'Mushrooms gathered in an apron, and a scolding for the wrong ones.'
+  ],
+  desert: [
+    'A caravan arriving at night, bells on every camel.',
+    'The first rain of the year, and everybody running out into it.'
+  ],
+  tundra: [
+    'Hands held out to a fire, and someone saying it was the warmest they had ever been.',
+    'Snow angels, dozens of them, in a field that is ice now.'
+  ],
+  volcanic: [
+    'The mountain humming softly, like it was content.',
+    'A forge-song, hammers keeping time.'
+  ],
+  swamp: [
+    'Lanterns of woven reed set adrift, one for every name.',
+    'Frogs, impossibly loud, and nobody able to sleep.'
+  ],
+  islands: [
+    'A boat coming home, everyone on the shore waving.',
+    'Shells laid in a spiral on the sand, one for every day of the year.'
+  ],
+  alien: [
+    'The sky answering a song with a colour.',
+    'Crystals ringing in a breeze, like a choir tuning up.'
+  ],
+  canyon: [
+    'A voice shouting across the gorge, and the echo shouting back something different.',
+    'The river, loud and cold, before it was gone.'
+  ]
+}
 
 const PLACE_NOTES = [
   'A cairn of balanced stones. Each one has a name scratched into it, too worn to read.',
@@ -445,7 +560,6 @@ export function narrate(traits: Traits, rng: Rng): Story {
   })
 
   const epithets = rng.shuffle([...EPITHETS])
-  const personal = rng.shuffle([...PERSONAL])
   const greetings: Record<Mood, string> = {
     serene: `Well met, traveller. It's a fine day to be walking, isn't it? Even now.`,
     melancholy: `Oh. A traveller. ${world} doesn't see many anymore. Not since ${CALAMITY_SHORT[biome]}.`,
@@ -469,8 +583,7 @@ export function narrate(traits: Traits, rng: Rng): Story {
         ? `They say ${relic} could make the whole land remember itself. Four ${pieces}, scattered. Find them, and bring them to ${finalePlace}.`
         : i === 1
           ? `${cap(people.who)} used to ${people.did}. I was only small, but I remember the sound of it.`
-          : `When you hold one of the ${pieces}, listen. They remember things the rest of us forgot.`,
-      personal[i]
+          : `When you hold one of the ${pieces}, listen. They remember things the rest of us forgot.`
     ]
   }))
 
@@ -479,6 +592,24 @@ export function narrate(traits: Traits, rng: Rng): Story {
     name: placeName(rng, biome, mood, used),
     note: notePool[i]
   }))
+
+  const questPool = rng.shuffle([...QUESTS])
+  const quests = Array.from({ length: QUEST_COUNT }, (_, i) => {
+    const q = questPool[i]
+    return { ...q, after: q.after.replace(/\{name\}/g, wanderers[i].name) }
+  })
+
+  const echoNames = Array.from({ length: 4 }, () => makeName(rng, true))
+  const echoes = rng
+    .shuffle([...BIOME_ECHOES[biome], ...rng.shuffle([...ECHOES]).slice(0, ECHO_COUNT)])
+    .slice(0, ECHO_COUNT)
+    .map((line, i) =>
+      line
+        .replace(/\{people\}/g, cap(people.who))
+        .replace(/\{world\}/g, world)
+        .replace(/\{relic\}/g, relic)
+        .replace(/\{name\}/g, echoNames[i % echoNames.length])
+    )
 
   const prologue = [
     `Once, ${world} ${LIVELY[biome]}. Then ${CALAMITY[biome]}, and ${relic} shattered into ${SHARD_COUNT} ${pieces}, scattered to the far corners of the land.`,
@@ -496,6 +627,8 @@ export function narrate(traits: Traits, rng: Rng): Story {
     shards,
     wanderers,
     places,
+    echoes,
+    quests,
     finale: {
       place: finalePlace,
       text: `You set the ${pieces} into ${relic}. For a moment nothing happens. Then light runs outward like water finding old riverbeds, and ${world} begins to remember itself. ${RESTORATION[biome]}`

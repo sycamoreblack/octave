@@ -271,6 +271,20 @@ export class AudioEngine {
     this.bell(this.scaleNote(Math.floor(Math.random() * 5), 1), 0, 0.04, this.sfx)
   }
 
+  /** A low two-note bell for waking a waystone; higher as more wake. */
+  wake(step: number): void {
+    if (!this.ctx) return
+    this.bell(this.scaleNote(step * 2, 0), 0, 0.1, this.sfx)
+    this.bell(this.scaleNote(step * 2 + 4, 0), 0.25, 0.07, this.sfx)
+  }
+
+  /** A soft, high, distant note for an echo. */
+  echo(): void {
+    if (!this.ctx) return
+    this.bell(this.scaleNote(Math.floor(Math.random() * 5) + 7, 1), 0, 0.06, this.sfx)
+    this.bell(this.scaleNote(Math.floor(Math.random() * 5) + 9, 1), 0.6, 0.04, this.sfx)
+  }
+
   discover(): void {
     if (!this.ctx) return
     this.bell(this.scaleNote(0, 1), 0, 0.08, this.sfx)

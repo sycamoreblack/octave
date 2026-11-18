@@ -14,7 +14,7 @@ const esc = (s: string): string =>
 
 export interface CompassMark {
   angle: number
-  kind: 'shard' | 'heart' | 'person' | 'cardinal' | 'minor'
+  kind: 'shard' | 'heart' | 'person' | 'cardinal' | 'minor' | 'stone' | 'item' | 'echo'
   label?: string
   distance?: number
 }
@@ -50,6 +50,13 @@ export class Hud {
   setObjective(count: string, text: string): void {
     this.objective.querySelector('.count')!.textContent = count
     this.objective.querySelector('.text')!.textContent = text
+  }
+
+  /** Shows what the player is carrying back to someone (empty hides it). */
+  setCarry(text: string): void {
+    const el = $('#carry')
+    el.textContent = text
+    el.classList.toggle('hidden', !text)
   }
 
   showBanner(kicker: string, name: string, seconds = 4): void {
@@ -185,6 +192,8 @@ export class Hud {
       [['story', 'finale'], 'The story so far'],
       [['shard'], 'Recovered'],
       [['person'], 'People met'],
+      [['request'], 'Lost and found'],
+      [['echo'], 'Echoes'],
       [['place'], 'Places found']
     ]
     body.innerHTML = sections

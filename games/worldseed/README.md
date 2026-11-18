@@ -4,7 +4,7 @@
 
 Worldseed is a third-person exploration game for the browser. You type a sentence like *"a drowned archipelago at dusk, where old lighthouses guard forgotten songs"*, and the game builds it: terrain, sky, weather, plants, ruins and wildlife. It also writes a short story to go with it.
 
-Every world has the same story shape. Something precious broke into four pieces. Each piece rests at a landmark with a pillar of light you can see from anywhere. Wanderers along the way tell you about the past and point you toward the next light. Bring the pieces home to the world's heart and the whole land changes.
+Every world has the same story shape. Something precious broke into four pieces. Each piece rests at a landmark with a pillar of light you can see from anywhere, sealed until you wake the three waystones hidden around it. Wanderers along the way tell you about the past, point you toward the next light, and ask you to find something they lost. Echoes of memory drift over the land for anyone who strays off the path. Bring the pieces home to the world's heart and the whole land changes, and the epilogue remembers who you helped.
 
 ## Run it
 
@@ -48,6 +48,14 @@ WORLDSEED_AI=1 npm run dev
 
 You can swim in water and murk. Ice and lava have a solid crust you can walk on.
 
+## Between the lights
+
+- **Waystones.** A sealed shard shimmers inside a shell of light. Three standing stones with faintly glowing runes stand 20–45 m around its landmark. The compass shows unwoken ones within 90 m. Wake all three (<kbd>E</kbd>) and the seal breaks.
+- **Lost things.** Each wanderer lost something at one of the minor places. Once they've asked, it's pinned on your map and compass. You can also stumble on it first. Bring it back and they mark an unfound landmark on your map. Their fate appears in the epilogue.
+- **Echoes.** Twelve drifting motes, each marked by a faint vertical shimmer. Walk through one to hear a single line of memory. They gather in the journal and are counted on the map and in the epilogue.
+
+`ROADMAP.md` has what's planned next.
+
 ## What the description controls
 
 The offline interpreter (`src/world/interpreter.ts`) reads keywords and phrases:
@@ -82,6 +90,7 @@ src/
     structures.ts    procedural landmarks, the heart, minor markers
     flora.ts         instanced, chunked, wind-swayed vegetation
     sky.ts liquid.ts weather.ts fauna.ts beacon.ts npc.ts character.ts
+    objectives.ts    waystones, seals, lost items, echoes, spot finding
     world.ts         assembles a scene from a WorldSpec
   story/
     narrator.ts      offline storyteller (grammar tables keyed by biome and mood)
@@ -103,4 +112,4 @@ Notes:
 
 ## Tests
 
-`npm test` covers the interpreter and story generator: determinism, keyword reading, negation, names, story completeness for odd inputs, random-prompt variety, and spec normalisation of hostile input.
+`npm test` covers the interpreter and story generator: determinism, keyword reading, negation, names, story completeness for odd inputs (including echoes and requests), random-prompt variety, spec normalisation of hostile input, and migration of saves from before echoes and requests existed.

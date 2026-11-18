@@ -65,11 +65,11 @@ export class WorldMap {
     ctx.putImageData(img, 0, 0)
   }
 
-  reveal(x: number, z: number): boolean {
+  reveal(x: number, z: number, radius = REVEAL): boolean {
     const cell = WORLD_SIZE / FOG_RES
     const ci = Math.floor((x + HALF) / cell)
     const cj = Math.floor((z + HALF) / cell)
-    const r = Math.ceil(REVEAL / cell)
+    const r = Math.ceil(radius / cell)
     let changed = false
     for (let j = cj - r; j <= cj + r; j++) {
       for (let i = ci - r; i <= ci + r; i++) {
@@ -126,7 +126,9 @@ export class WorldMap {
     canvas: HTMLCanvasElement,
     player: THREE.Vector3,
     facing: number,
-    metWanderers: number[]
+    metWanderers: number[],
+    /** Extra pins, e.g. lost things you've been asked to find. */
+    pins: { x: number; z: number; label: string }[] = []
   ): void {
     const ctx = canvas.getContext('2d')!
     const W = canvas.width
@@ -199,6 +201,17 @@ export class WorldMap {
     ctx.fillStyle = '#ffffff'
     ctx.fill()
     label(this.world.spec.story.finale.place, toPx(h.x), toPx(h.z) - 16)
+
+    for (const pin of pins) {
+      const x = toPx(pin.x)
+      const y = toPx(pin.z)
+      ctx.fillStyle = '#ffe7b0'
+      ctx.strokeStyle = '#1b1408'
+      ctx.lineWidth = 1.5
+      ctx.fillRect(x - 5, y - 5, 10, 10)
+      ctx.strokeRect(x - 5, y - 5, 10, 10)
+      label(pin.label, x, y - 10)
+    }
 
     for (const i of metWanderers) {
       const w = this.world.wanderers[i]

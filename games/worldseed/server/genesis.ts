@@ -125,6 +125,29 @@ const WorldSchema = z.object({
         })
       )
       .describe('Exactly 4 minor places'),
+    echoes: z
+      .array(z.string())
+      .describe(
+        'Exactly 12 one-sentence memories of the world before it broke, each a small specific moment (a sound, a smell, a scene)'
+      ),
+    quests: z
+      .array(
+        z.object({
+          item: z.string().describe('A small lost object with an article, e.g. "a tin music box"'),
+          ask: z
+            .string()
+            .describe(
+              'The wanderer asks you to find it. Must contain the literal token {place} where the place name goes.'
+            ),
+          thanks: z
+            .string()
+            .describe('What they say when you bring it back; they offer to mark your map'),
+          after: z
+            .string()
+            .describe('One epilogue sentence about how this wanderer’s story ends, naming them')
+        })
+      )
+      .describe('Exactly 3; quest i belongs to wanderers[i] and its item lies at places[i]'),
     finale: z.object({
       place: z.string().describe('Name of the central place where the relic is restored'),
       text: z
@@ -140,6 +163,7 @@ const SYSTEM = `You are the world-builder for Worldseed, a gentle third-person e
 How the game uses your specification:
 - The land is a single island, roughly 1.1 km across, surrounded by its liquid. Four landmarks (your four structures) sit around the compass, and a central heart, where the relic is restored, sits near the middle.
 - Each landmark holds one piece of the broken relic, glowing in the accent colour, with a pillar of light visible from anywhere. The player finds all four pieces, meets three wanderers who talk and give directions, discovers four minor places, and then restores the relic at the heart.
+- Each piece is sealed until the player wakes three waystones around its landmark. Each wanderer has lost something at one of the minor places and asks the player to bring it back. Twelve drifting echoes, each a one-line memory, are scattered over the land.
 - The colours are rendered directly, so choose a coherent, beautiful palette that matches the description and the time of day. Night skies should be dark; dusk horizons warm. The accent must stay vivid against the sky.
 
 Writing:

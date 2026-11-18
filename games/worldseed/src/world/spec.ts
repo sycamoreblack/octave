@@ -101,6 +101,21 @@ export interface WandererStory {
   lines: string[]
 }
 
+/**
+ * Something a wanderer lost at one of the minor places (wanderer i → places[i]).
+ * `{place}` in any line is replaced with that place's name at runtime.
+ */
+export interface QuestStory {
+  /** e.g. "a cracked lantern glass" */
+  item: string
+  /** The request, spoken by the wanderer. */
+  ask: string
+  /** Spoken when you bring the item back. */
+  thanks: string
+  /** One sentence for the epilogue: how their story ends. */
+  after: string
+}
+
 export interface Story {
   title: string
   role: string
@@ -111,6 +126,9 @@ export interface Story {
   shards: ShardStory[]
   wanderers: WandererStory[]
   places: { name: string; note: string }[]
+  /** One-line memories found drifting over the land. */
+  echoes: string[]
+  quests: QuestStory[]
   finale: { place: string; text: string }
   epilogue: string[]
 }
@@ -149,6 +167,10 @@ export interface WorldSpec {
 }
 
 export const SHARD_COUNT = 4
+export const ECHO_COUNT = 12
+export const QUEST_COUNT = 3
+/** Waystones to wake around each landmark before its shard can be taken. */
+export const WAYSTONES = 3
 
 const oneOf = <T extends string>(list: readonly T[], v: unknown, fallback: T): T =>
   typeof v === 'string' && (list as readonly string[]).includes(v) ? (v as T) : fallback
@@ -223,6 +245,18 @@ export function normalizeSpec(raw: unknown, base: WorldSpec): WorldSpec {
     name: str(placesIn[i]?.name, b.name, 60),
     note: str(placesIn[i]?.note, b.note, 400)
   }))
+  const echoesIn: unknown[] = Array.isArray(s.echoes) ? s.echoes : []
+  const echoes = baseStory.echoes.map((b, i) => str(echoesIn[i], b, 300))
+  const questsIn: any[] = Array.isArray(s.quests) ? s.quests : []
+  const quests: QuestStory[] = baseStory.quests.map((b, i) => {
+    const q = questsIn[i]
+    return {
+      item: str(q?.item, b.item, 60),
+      ask: str(q?.ask, b.ask, 500),
+      thanks: str(q?.thanks, b.thanks, 500),
+      after: str(q?.after, b.after, 300)
+    }
+  })
   const paras = (v: unknown, fb: string[]): string[] =>
     Array.isArray(v) && v.some((x) => typeof x === 'string' && x.trim())
       ? v
@@ -269,6 +303,8 @@ export function normalizeSpec(raw: unknown, base: WorldSpec): WorldSpec {
       shards,
       wanderers,
       places,
+      echoes,
+      quests,
       finale: {
         place: str(s.finale?.place, baseStory.finale.place, 60),
         text: str(s.finale?.text, baseStory.finale.text, 900)

@@ -5,7 +5,7 @@ import type { WorldSpec } from '../world/spec'
  * private windows and blocked storage just mean nothing is remembered.
  */
 export interface JournalEntry {
-  kind: 'story' | 'shard' | 'place' | 'person' | 'finale'
+  kind: 'story' | 'shard' | 'place' | 'person' | 'finale' | 'request' | 'echo'
   title: string
   text: string
 }
@@ -20,6 +20,14 @@ export interface Progress {
   explored: string
   playTime: number
   distance: number
+  /** Woken waystones, as "shard-stone" ids. */
+  stones: string[]
+  /** Echo indices heard. */
+  echoes: number[]
+  /** Quest indices (= wanderer indices): asked about, item found, item returned. */
+  asked: number[]
+  found: number[]
+  returned: number[]
 }
 
 export interface SaveEntry {
@@ -54,7 +62,12 @@ export function emptyProgress(): Progress {
     player: null,
     explored: '',
     playTime: 0,
-    distance: 0
+    distance: 0,
+    stones: [],
+    echoes: [],
+    asked: [],
+    found: [],
+    returned: []
   }
 }
 

@@ -12,7 +12,9 @@ import { buildWeather, type WeatherRig } from './weather'
 import { buildFauna, type FaunaRig } from './fauna'
 import { Beacon } from './beacon'
 import { Wanderer } from './npc'
-import { SHARD_COUNT, type WorldSpec } from './spec'
+import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, WAYSTONES, type WorldSpec } from './spec'
+import { Echo, findSpot, LostItem, Seal, Waystone } from './objectives'
+import { LAND_RADIUS } from './terrain'
 
 export interface Quality {
   /** Multiplier on flora/particle counts. */
@@ -36,6 +38,9 @@ export interface ShardNode {
   at: THREE.Vector3
   structure: Built
   collected: boolean
+  /** Wake every stone to break the seal. May be fewer than WAYSTONES on cramped terrain. */
+  stones: Waystone[]
+  seal: Seal
 }
 
 export interface PlaceNode {
@@ -71,6 +76,9 @@ export class World {
   places: PlaceNode[] = []
   heart!: HeartNode
   wanderers: Wanderer[] = []
+  /** Things the wanderers lost: items[i] belongs to wanderers[i]. */
+  items: LostItem[] = []
+  echoes: Echo[] = []
   private tickers: ((t: number, dt: number) => void)[] = []
   fogBase = 0
   /** 0..1, raised by the finale: brightens and saturates the world. */
@@ -236,7 +244,10 @@ export class World {
       const at = built.shardAt.clone().applyMatrix4(built.group.matrixWorld)
       const beacon = new Beacon(spec.palette.accent, at)
       this.scene.add(beacon.group)
-      this.shards.push({ index: i, beacon, at, structure: built, collected: false })
+      const seal = new Seal(spec.palette.accent, at)
+      this.scene.add(seal.mesh)
+      const stones = this.placeWaystones(site.x, site.z, rng.fork(`stones${i}`), i)
+      this.shards.push({ index: i, beacon, at, structure: built, collected: false, stones, seal })
       this.places.push({
         name: story.shards[i].place,
         note: '',
@@ -269,6 +280,24 @@ export class World {
         })
     })
 
+    // Each of the first wanderers lost something at a minor place.
+    for (let i = 0; i < QUEST_COUNT && i < layout.places.length; i++) {
+      const site = layout.places[i]
+      const spot =
+        findSpot(terrain, this.colliders, rng.fork(`item${i}`), {
+          cx: site.x,
+          cz: site.z,
+          rMin: 2.6,
+          rMax: 6,
+          avoid: [],
+          gap: 0,
+          maxSlope: 1.4
+        }) ?? new THREE.Vector3(site.x + 3, terrain.surfaceAt(site.x + 3, site.z), site.z)
+      const item = new LostItem(spot, i)
+      this.items.push(item)
+      this.scene.add(item.group)
+    }
+
     const h = layout.heart
     const hy = terrain.groundAt(h.x, h.z)
     const heart = buildHeart(
@@ -293,6 +322,81 @@ export class World {
       kind: 'heart',
       discovered: false
     })
+    this.placeEchoes(rng.fork('echoes'))
+  }
+
+  /** Three waystones in a loose ring 20–45 m out from a landmark. */
+  private placeWaystones(cx: number, cz: number, rng: Rng, seed: number): Waystone[] {
+    const stones: Waystone[] = []
+    const taken: { x: number; z: number }[] = []
+    for (let k = 0; k < WAYSTONES; k++) {
+      const spot =
+        findSpot(this.terrain, this.colliders, rng, {
+          cx,
+          cz,
+          rMin: 20,
+          rMax: 45,
+          avoid: taken,
+          gap: 14
+        }) ??
+        findSpot(this.terrain, this.colliders, rng, {
+          cx,
+          cz,
+          rMin: 12,
+          rMax: 70,
+          avoid: taken,
+          gap: 6,
+          maxSlope: 1.3
+        })
+      if (!spot) continue
+      taken.push(spot)
+      const stone = new Waystone(
+        this.spec,
+        spot,
+        Math.atan2(cx - spot.x, cz - spot.z),
+        this.colliders,
+        seed * 10 + k
+      )
+      stones.push(stone)
+      this.scene.add(stone.group)
+    }
+    return stones
+  }
+
+  /** Echoes drift well away from everything else, so finding them means wandering. */
+  private placeEchoes(rng: Rng): void {
+    const avoid: { x: number; z: number }[] = [
+      ...this.shards.map((s) => s.at),
+      ...this.places.map((p) => p.at),
+      ...this.shards.flatMap((s) => s.stones.map((w) => w.at))
+    ]
+    for (let i = 0; i < ECHO_COUNT; i++) {
+      const spot =
+        findSpot(this.terrain, this.colliders, rng, {
+          cx: 0,
+          cz: 0,
+          rMin: 30,
+          rMax: LAND_RADIUS * 0.95,
+          avoid,
+          gap: 70,
+          maxSlope: 1.2
+        }) ??
+        findSpot(this.terrain, this.colliders, rng, {
+          cx: 0,
+          cz: 0,
+          rMin: 10,
+          rMax: LAND_RADIUS,
+          avoid,
+          gap: 25,
+          maxSlope: 2
+        })
+      if (!spot) continue
+      spot.y += 1.6
+      avoid.push(spot)
+      const echo = new Echo(this.spec.palette.accent, spot)
+      this.echoes.push(echo)
+      this.scene.add(echo.group)
+    }
   }
 
   update(t: number, dt: number, camera: THREE.Camera, player: THREE.Vector3): void {
@@ -307,7 +411,13 @@ export class World {
     this.liquid.uniforms.uTime.value = t
     this.weather?.update(t, player)
     this.fauna.update(t, dt, player)
-    for (const s of this.shards) s.beacon.update(t, dt)
+    for (const s of this.shards) {
+      s.beacon.update(t, dt)
+      s.seal.update(t, dt)
+      for (const w of s.stones) w.update(t, dt)
+    }
+    for (const it of this.items) it.update(t, dt)
+    for (const e of this.echoes) e.update(t, dt)
     this.heart.beacon.update(t, dt)
     this.heart.ring.rotation.y = t * 0.05 * (1 + this.restoration * 4)
     this.heart.relic.rotation.y = t * 0.8

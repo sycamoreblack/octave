@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { interpret, randomPrompt, EXAMPLE_PROMPTS } from './interpreter'
-import { normalizeSpec, SHARD_COUNT } from './spec'
+import { ECHO_COUNT, normalizeSpec, QUEST_COUNT, SHARD_COUNT } from './spec'
 import { Rng } from '../engine/rng'
 
 describe('interpret', () => {
@@ -60,6 +60,14 @@ describe('interpret', () => {
       expect(w.structures.length).toBeGreaterThan(0)
       expect(w.flora.kinds.length).toBeGreaterThan(0)
       for (const c of Object.values(w.palette)) expect(c).toMatch(/^#[0-9a-f]{6}$/)
+      expect(w.story.echoes).toHaveLength(ECHO_COUNT)
+      expect(new Set(w.story.echoes).size).toBe(ECHO_COUNT)
+      for (const e of w.story.echoes) expect(e).not.toMatch(/\{\w+\}/)
+      expect(w.story.quests).toHaveLength(QUEST_COUNT)
+      w.story.quests.forEach((q, i) => {
+        expect(q.ask).toContain('{place}')
+        expect(q.after).toContain(w.story.wanderers[i].name)
+      })
     }
   })
 
@@ -94,6 +102,28 @@ describe('normalizeSpec', () => {
     expect(out.story.shards[0].name).toBe('One')
     expect(out.story.shards[0].lore).toBe(base.story.shards[0].lore)
     expect(out.story.shards).toHaveLength(SHARD_COUNT)
+  })
+
+  it('migrates old saves that predate echoes and quests', () => {
+    const old = JSON.parse(JSON.stringify(base))
+    delete old.story.echoes
+    delete old.story.quests
+    old.story.title = 'An Old Save'
+    const out = normalizeSpec(old, base)
+    expect(out.story.title).toBe('An Old Save')
+    expect(out.story.echoes).toEqual(base.story.echoes)
+    expect(out.story.quests).toEqual(base.story.quests)
+  })
+
+  it('takes partial quests and echoes from Claude', () => {
+    const out = normalizeSpec(
+      { story: { echoes: ['A bell.', 42], quests: [{ item: 'a spoon' }] } },
+      base
+    )
+    expect(out.story.echoes[0]).toBe('A bell.')
+    expect(out.story.echoes[1]).toBe(base.story.echoes[1])
+    expect(out.story.quests[0].item).toBe('a spoon')
+    expect(out.story.quests[0].ask).toBe(base.story.quests[0].ask)
   })
 
   it('survives garbage', () => {
