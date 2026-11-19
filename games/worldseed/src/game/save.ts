@@ -29,6 +29,8 @@ export interface Progress {
   asked: number[]
   found: number[]
   returned: number[]
+  /** Recent free conversation with each wanderer, keyed by wanderer index. */
+  chats: Record<string, { role: 'user' | 'assistant'; text: string }[]>
 }
 
 export interface SaveEntry {
@@ -75,7 +77,8 @@ export function emptyProgress(): Progress {
     echoes: [],
     asked: [],
     found: [],
-    returned: []
+    returned: [],
+    chats: {}
   }
 }
 

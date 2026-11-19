@@ -3,6 +3,7 @@ import type { Plugin } from 'vite'
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
+import { handleTalk } from './talk'
 import { BIOMES, CREATURES, FLORA, LIQUIDS, MOODS, STRUCTURES, WEATHERS } from '../src/world/spec'
 
 /**
@@ -239,9 +240,15 @@ async function dream(prompt: string): Promise<unknown> {
 
 async function handle(req: IncomingMessage, res: ServerResponse, next: () => void): Promise<void> {
   const url = req.url?.split('?')[0] ?? ''
-  if (!url.endsWith('/api/status') && !url.endsWith('/api/genesis')) return next()
+  if (!url.endsWith('/api/status') && !url.endsWith('/api/genesis') && !url.endsWith('/api/talk'))
+    return next()
   if (url.endsWith('/api/status'))
-    return send(res, 200, { ai: aiEnabled(), model: aiEnabled() ? MODEL : null })
+    return send(res, 200, {
+      ai: aiEnabled(),
+      model: aiEnabled() ? MODEL : null,
+      talk: aiEnabled() || process.env.WORLDSEED_MOCK_AI === '1'
+    })
+  if (url.endsWith('/api/talk')) return handleTalk(req, res, readJson, aiEnabled())
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   if (!aiEnabled()) return send(res, 503, { error: 'Claude is not configured on this server' })
   let prompt: string

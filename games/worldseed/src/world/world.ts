@@ -81,6 +81,8 @@ export class World {
   echoes: Echo[] = []
   private tickers: ((t: number, dt: number) => void)[] = []
   fogBase = 0
+  /** Current time of day (0..1); starts at the described time and may advance. */
+  timeOfDay = 0
   /** 0..1, raised by the finale: brightens and saturates the world. */
   restoration = 0
   private baseColors: {
@@ -104,6 +106,7 @@ export class World {
   async build(onProgress: (stage: string, f: number) => void): Promise<void> {
     const spec = this.spec
     const rng = new Rng(spec.seed)
+    this.timeOfDay = spec.timeOfDay
     const step = async (label: string, f: number): Promise<void> => {
       onProgress(label, f)
       await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))

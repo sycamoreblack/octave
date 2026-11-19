@@ -99,7 +99,37 @@ export class Hud {
     this.dialogue.style.animation = ''
   }
 
+  /** The line the player just said (empty hides it). */
+  setYouSaid(text: string): void {
+    const el = this.dialogue.querySelector<HTMLElement>('.you')!
+    el.textContent = text ? `You: ${text}` : ''
+    el.classList.toggle('hidden', !text)
+  }
+
+  /** Update the wanderer's line in place (for streamed replies). */
+  setLine(text: string, thinking = false): void {
+    const el = this.dialogue.querySelector<HTMLElement>('.line')!
+    el.textContent = text
+    el.classList.toggle('thinking', thinking)
+  }
+
+  setMore(text: string): void {
+    this.dialogue.querySelector('.more')!.textContent = text
+  }
+
+  showSay(on: boolean): void {
+    document.getElementById('say')!.classList.toggle('hidden', !on)
+    const input = document.getElementById('say-input') as HTMLInputElement
+    if (on) {
+      input.disabled = false
+      input.value = ''
+      input.focus()
+    }
+  }
+
   hideDialogue(): void {
+    this.showSay(false)
+    this.setYouSaid('')
     this.dialogue.classList.add('hidden')
   }
 

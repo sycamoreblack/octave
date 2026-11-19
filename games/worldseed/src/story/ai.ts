@@ -1,14 +1,53 @@
 import { normalizeSpec, type WorldSpec } from '../world/spec'
 
-/** Client for the optional /api/genesis endpoint (see server/genesis.ts). */
-export async function claudeAvailable(): Promise<boolean> {
+import type { TalkPayload } from '../../server/talk'
+
+export type { TalkPayload }
+
+/** What the optional server can do (see server/genesis.ts and server/talk.ts). */
+export async function claudeStatus(): Promise<{ ai: boolean; talk: boolean }> {
   try {
     const r = await fetch('./api/status', { cache: 'no-store' })
-    if (!r.ok) return false
-    const j = (await r.json()) as { ai?: boolean }
-    return j.ai === true
+    if (!r.ok) return { ai: false, talk: false }
+    const j = (await r.json()) as { ai?: boolean; talk?: boolean }
+    return { ai: j.ai === true, talk: j.talk === true }
   } catch {
-    return false
+    return { ai: false, talk: false }
+  }
+}
+
+/** Talk to a wanderer. `onText` receives the reply so far as it streams in. */
+export async function talkToWanderer(
+  payload: TalkPayload,
+  onText: (soFar: string) => void,
+  timeoutMs = 60_000
+): Promise<string> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const r = await fetch('./api/talk', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    })
+    if (!r.ok || !r.body) {
+      const err = (await r.json().catch(() => ({}))) as { error?: string }
+      throw new Error(err.error ?? `HTTP ${r.status}`)
+    }
+    const reader = r.body.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+      onText(text)
+    }
+    text += decoder.decode()
+    return text.trim()
+  } finally {
+    clearTimeout(timer)
   }
 }
 

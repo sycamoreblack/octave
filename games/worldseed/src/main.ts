@@ -7,7 +7,7 @@ import { Hud, esc } from './ui/hud'
 import { Game } from './game/game'
 import { EXAMPLE_PROMPTS, interpret, randomPrompt } from './world/interpreter'
 import { normalizeSpec, type WorldSpec } from './world/spec'
-import { claudeAvailable, dreamWithClaude } from './story/ai'
+import { claudeStatus, dreamWithClaude } from './story/ai'
 import {
   decodeShare,
   deleteSave,
@@ -56,6 +56,8 @@ function applyAccessibility(): void {
 applyAccessibility()
 let game: Game | null = null
 let aiReady = false
+/** Wanderers can hold free conversations (Claude, or the offline mock). */
+let talkReady = false
 let sharedSpec: unknown = null
 let sharedPrompt = ''
 
@@ -197,6 +199,7 @@ async function startWorld(spec: WorldSpec, saved: Progress | null): Promise<void
   }
   showLoading(spec.prompt, 'Raising the land', 0.5)
   const g = new Game(renderer, input, hud, audio, settings, spec)
+  g.chatEnabled = talkReady
   try {
     await g.load(saved, (stage, f) => showLoading(null, stage, 0.5 + f * 0.5))
   } catch (err) {
@@ -432,7 +435,10 @@ async function boot(): Promise<void> {
   }
   if (shared.prompt || shared.spec)
     $('.tag').textContent = 'Someone shared a world with you. Press Begin to walk into it.'
-  aiReady = await claudeAvailable()
+  const status = await claudeStatus()
+  aiReady = status.ai
+  talkReady = status.talk
+  if (game) game.chatEnabled = talkReady
   if (aiReady) {
     $('#ai-row').hidden = false
     useAi.checked = settings.useClaude

@@ -84,7 +84,17 @@
       <div id="hint"></div>
       <div id="dialogue" class="hidden">
         <div class="who"><b></b><span></span></div>
+        <p class="you hidden"></p>
         <p class="line"></p>
+        <form id="say" class="hidden" autocomplete="off">
+          <input
+            id="say-input"
+            maxlength="300"
+            placeholder="Say something…"
+            aria-label="Say something"
+          />
+          <button type="submit">Say</button>
+        </form>
         <div class="more">E ▸</div>
       </div>
       <div id="clickhint">Click to look around</div>

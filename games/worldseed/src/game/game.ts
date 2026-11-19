@@ -5,6 +5,7 @@ import { World, QUALITY, type ShardNode } from '../world/world'
 import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, type WorldSpec } from '../world/spec'
 import type { Waystone } from '../world/objectives'
 import { pluralize } from '../story/narrator'
+import { talkToWanderer, type TalkPayload } from '../story/ai'
 import { Player } from './player'
 import { FollowCamera } from './camera'
 import { Hud, esc, type CompassMark } from '../ui/hud'
@@ -18,7 +19,7 @@ import {
   type Settings
 } from './save'
 
-type Mode = 'loading' | 'playing' | 'card' | 'journal' | 'map' | 'paused' | 'photo'
+type Mode = 'loading' | 'playing' | 'card' | 'journal' | 'map' | 'paused' | 'photo' | 'chat'
 
 type Target =
   | { kind: 'shard'; node: ShardNode }
@@ -41,6 +42,17 @@ const DIRS = [
 function compassWord(dx: number, dz: number): string {
   const a = Math.atan2(dx, -dz)
   return DIRS[(Math.round(a / (Math.PI / 4)) + 8) % 8]
+}
+
+const howFar = (d: number): string =>
+  d < 160 ? 'not far' : d < 380 ? 'a fair walk' : 'a long way off'
+
+function timeWord(t: number): string {
+  if (t < 0.17 || t > 0.86) return 'night'
+  if (t < 0.32) return 'dawn'
+  if (t < 0.62) return 'day'
+  if (t < 0.7) return 'late afternoon'
+  return 'dusk'
 }
 
 /** "The Harvest Bell" → "the Harvest Bell", for use mid-sentence. */
@@ -303,7 +315,7 @@ export class Game {
   private handleGlobalKeys(): void {
     // Global keys work in every mode, so read them regardless of input.enabled.
     const hit = (a: Action): boolean => this.input.hitAlways(a)
-    if (this.mode === 'card' || this.mode === 'loading') return
+    if (this.mode === 'card' || this.mode === 'loading' || this.mode === 'chat') return
     if (this.mode === 'photo') {
       if (hit('photo') || hit('pause')) this.setPhoto(false)
       else if (hit('jump')) void this.capture()
@@ -359,7 +371,7 @@ export class Game {
 
   closePanels(resume = true): void {
     // Any open menu ends a conversation; it would otherwise sit behind the panel.
-    if (!resume || this.mode === 'playing') {
+    if (!resume || this.mode === 'playing' || this.mode === 'chat') {
       this.talking = null
       this.hud.hideDialogue()
     }
@@ -603,6 +615,8 @@ export class Game {
     if (!this.talking) return
     this.talking.line++
     if (this.talking.line >= this.talking.lines.length) {
+      // With a conversation server, the scripted lines lead into free talk (keyboard/touch only).
+      if (this.chatEnabled && this.input.device !== 'pad') return this.enterChat(this.talking.index)
       this.talking = null
       this.hud.hideDialogue()
       return
@@ -617,6 +631,135 @@ export class Game {
     this.audio.blip()
   }
 
+  // ---------------- free conversation ----------------
+
+  /** Set by main.ts when the server can hold conversations (Claude, or the offline mock). */
+  chatEnabled = false
+  private chatBusy = false
+
+  private enterChat(index: number): void {
+    this.mode = 'chat'
+    this.unlockPointer()
+    const w = this.world.wanderers[index]
+    this.hud.setMore('Enter to speak · Esc to walk on')
+    this.hud.showSay(true)
+    const input = document.getElementById('say-input') as HTMLInputElement
+    input.placeholder = `Say something to ${w.story.name}…`
+    const form = document.getElementById('say') as HTMLFormElement
+    form.onsubmit = (e) => {
+      e.preventDefault()
+      const text = input.value.trim()
+      if (!text) return this.exitChat()
+      void this.say(index, text)
+    }
+    input.onkeydown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        this.exitChat()
+      }
+    }
+  }
+
+  private exitChat(): void {
+    if (this.mode !== 'chat') return
+    this.talking = null
+    this.hud.hideDialogue()
+    this.mode = 'playing'
+    this.save()
+  }
+
+  private async say(index: number, text: string): Promise<void> {
+    if (this.chatBusy) return
+    this.chatBusy = true
+    const w = this.world.wanderers[index]
+    const input = document.getElementById('say-input') as HTMLInputElement
+    input.value = ''
+    input.disabled = true
+    this.hud.setYouSaid(text)
+    this.hud.setLine('…', true)
+    const history = (this.progress.chats[index] ??= [])
+    try {
+      const reply = await talkToWanderer(this.talkPayload(index, text), (soFar) =>
+        this.hud.setLine(soFar)
+      )
+      this.hud.setLine(reply || '…')
+      this.audio.blip()
+      history.push({ role: 'user', text }, { role: 'assistant', text: reply || '…' })
+      // Keep the last few exchanges: enough for continuity, small enough to send each time.
+      if (history.length > 16) history.splice(0, history.length - 16)
+    } catch (err) {
+      this.hud.setLine(`${w.story.name} looks at you for a long moment, lost in thought.`)
+      this.hud.toast(
+        `Couldn't reach the storyteller: ${esc(String((err as Error).message ?? err))}`
+      )
+    } finally {
+      this.chatBusy = false
+      if (this.mode === 'chat') {
+        input.disabled = false
+        input.focus()
+      }
+    }
+  }
+
+  /** Everything a wanderer knows, from where they stand, for the conversation server. */
+  private talkPayload(index: number, message: string): TalkPayload {
+    const s = this.spec.story
+    const w = this.world.wanderers[index]
+    const from = w.position
+    const p = this.progress
+    const q = s.quests[index]
+    const h = this.world.heart.center
+    const state = p.returned.includes(index)
+      ? 'returned'
+      : p.found.includes(index)
+        ? 'found'
+        : p.asked.includes(index)
+          ? 'asked'
+          : 'unasked'
+    return {
+      world: {
+        name: this.spec.name,
+        prompt: this.spec.prompt,
+        biome: this.spec.biome,
+        mood: this.spec.mood,
+        timeOfDay: timeWord(this.world.timeOfDay),
+        weather: this.spec.weather,
+        relic: s.relic,
+        shardNoun: s.shardNoun,
+        goal: s.goal,
+        heart: s.finale.place,
+        restored: p.restored,
+        prologue: s.prologue,
+        places: [
+          ...s.places.map((pl) => pl.name),
+          ...s.shards.map((sh) => sh.place),
+          s.finale.place
+        ],
+        lights: this.world.shards.map((n) => ({
+          name: s.shards[n.index].name,
+          place: s.shards[n.index].place,
+          taken: n.collected,
+          direction: compassWord(n.at.x - from.x, n.at.z - from.z),
+          distance: howFar(n.at.distanceTo(from))
+        })),
+        heartDirection: `${compassWord(h.x - from.x, h.z - from.z)} of here, ${howFar(h.distanceTo(from))}`
+      },
+      wanderer: {
+        name: w.story.name,
+        epithet: w.story.epithet,
+        lines: w.story.lines,
+        request:
+          q && index < QUEST_COUNT
+            ? { item: q.item, place: s.places[index]?.name ?? '', state }
+            : null,
+        others: this.world.wanderers.filter((o) => o !== w).map((o) => o.story.name)
+      },
+      player: { role: s.role, found: p.collected.length, total: SHARD_COUNT },
+      history: (p.chats[index] ?? []).slice(-12),
+      message
+    }
+  }
+
   /** A wanderer's advice, computed live: where is the nearest light you haven't taken? */
   private hintLine(from: THREE.Vector3): string {
     const s = this.spec.story
@@ -629,7 +772,7 @@ export class Game {
     }
     const near = remaining.reduce((a, b) => (a.at.distanceTo(from) < b.at.distanceTo(from) ? a : b))
     const d = near.at.distanceTo(from)
-    const how = d < 160 ? 'not far' : d < 380 ? 'a fair walk' : 'a long way off'
+    const how = howFar(d)
     const place = s.shards[near.index].place
     return `If you're looking for the lights: ${compassWord(near.at.x - from.x, near.at.z - from.z)} of here, ${how}. Folk used to call that place ${place}.`
   }
