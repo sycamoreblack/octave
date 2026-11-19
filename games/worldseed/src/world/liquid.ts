@@ -31,6 +31,7 @@ uniform vec3 uSky;
 uniform vec3 uSunColor;
 uniform vec3 uSunDir;
 uniform float uSunPower;
+uniform float uRenew;
 varying vec3 vWorld;
 
 float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -58,8 +59,11 @@ void main() {
     float n = fbm(p * 0.05 + flow * 0.02);
     float cracks = smoothstep(0.06, 0.0, abs(fbm(p * 0.09 - flow * 0.03) - 0.5));
     vec3 crust = vec3(0.08, 0.05, 0.05) + vec3(0.06, 0.03, 0.02) * n;
+    // Restored: the lava cools to dark glassy stone with only a faint glow in the cracks.
+    crust = mix(crust, vec3(0.16, 0.14, 0.15) + vec3(0.05) * n, uRenew);
     vec3 glow = mix(uColor, vec3(1.0, 0.85, 0.3), n);
-    col = mix(crust, glow * 2.2, cracks * 0.85 + smoothstep(1.5, 0.0, depth) * 0.4);
+    float heat = (cracks * 0.85 + smoothstep(1.5, 0.0, depth) * 0.4) * (1.0 - 0.9 * uRenew);
+    col = mix(crust, glow * 2.2, heat);
   } else if (uKind == 2) {
     // Ice: pale, slightly glossy, with cracks and snow drift.
     float n = fbm(p * 0.04);
@@ -79,8 +83,10 @@ void main() {
     float calm = uKind == 3 ? 0.25 : 1.0;
     vec3 N = normalize(vec3((a - bx) * 0.9 * calm, 1.0, (a - bz) * 0.9 * calm));
     float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
-    vec3 deep = uColor * (uKind == 3 ? 0.45 : 0.35);
-    vec3 shallow = mix(uColor * 1.3, vec3(0.9, 0.95, 0.9), uKind == 3 ? 0.0 : 0.15);
+    // Restored murk clears toward fresh water.
+    vec3 base = uKind == 3 ? mix(uColor, uColor * 1.4 + vec3(0.02, 0.07, 0.09), uRenew) : uColor;
+    vec3 deep = base * (uKind == 3 ? 0.45 : 0.35);
+    vec3 shallow = mix(base * 1.3, vec3(0.9, 0.95, 0.9), uKind == 3 ? 0.0 : 0.15);
     col = mix(shallow, deep, smoothstep(0.0, 14.0, depth));
     col = mix(col, uSky, 0.15 + fres * 0.55);
     float spec = pow(max(dot(reflect(-uSunDir, N), V), 0.0), 180.0);
@@ -121,7 +127,8 @@ export function buildLiquid(
     uSky: { value: new THREE.Color(spec.palette.skyHorizon) },
     uSunColor: { value: new THREE.Color(spec.palette.sun) },
     uSunDir: { value: sunDir.clone() },
-    uSunPower: { value: sunPower }
+    uSunPower: { value: sunPower },
+    uRenew: { value: 0 }
   }
   const mat = new THREE.ShaderMaterial({
     uniforms,

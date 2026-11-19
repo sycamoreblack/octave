@@ -44,6 +44,14 @@ export class Wanderer {
     this.figure.root.name = `wanderer-${story.name}`
   }
 
+  /** Move this wanderer's wandering ground (and them) somewhere new. */
+  moveHome(to: THREE.Vector3): void {
+    this.home.copy(to)
+    this.position.set(to.x, this.terrain.surfaceAt(to.x, to.z), to.z)
+    this.target.copy(this.position)
+    this.figure.root.position.copy(this.position)
+  }
+
   update(t: number, dt: number, player: THREE.Vector3): void {
     const toPlayer = Math.hypot(player.x - this.position.x, player.z - this.position.z)
     let desiredSpeed = 0

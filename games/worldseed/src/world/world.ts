@@ -14,6 +14,7 @@ import { Beacon } from './beacon'
 import { Wanderer } from './npc'
 import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, WAYSTONES, type WorldSpec } from './spec'
 import { Echo, findSpot, LostItem, Seal, Waystone } from './objectives'
+import { Renewal } from './renewal'
 import { LAND_RADIUS } from './terrain'
 import { measureShift, worldSkyAt, type SkyShift } from './daycycle'
 
@@ -141,6 +142,16 @@ export class World {
       this.quality.detail
     )
     this.scene.add(flora.group)
+    this.renewal = new Renewal(
+      spec,
+      this.terrain,
+      this.colliders,
+      this.heart.center,
+      flora.group,
+      rng.fork('renewal'),
+      this.quality.detail
+    )
+    this.scene.add(this.renewal.group)
 
     await step('Waking the wind', 0.8)
     this.weather = buildWeather(spec, rng.fork('weather'), this.quality.detail)
@@ -209,6 +220,7 @@ export class World {
     )
     if (night > 0.5) this.hemi.color.lerp(new THREE.Color('#7f96d8'), 0.6)
     if (night > 0.5) this.hemi.intensity *= 1.3
+    this.hemiBase = this.hemi.intensity
     this.scene.add(this.hemi)
     // Lava glows up onto everything; otherwise a soft sky-tinted fill keeps shadows readable.
     const fill =
@@ -444,14 +456,21 @@ export class World {
       this.lightningTimer -= dt
       const flash = this.sky.uniforms.uFlash
       flash.value = Math.max(0, (flash.value as number) - dt * 3)
-      if (this.lightningTimer < 0) {
+      if (this.lightningTimer < 0 && this.restoration < 0.5) {
         this.lightningTimer = 5 + Math.random() * 10
         flash.value = this.reduceFlashes ? 0.08 : 0.9
         this.onLightning?.()
       }
-      this.hemi.intensity = 0.9 + (flash.value as number) * 2
+      this.hemi.intensity = this.hemiBase * 0.55 + (flash.value as number) * 2
     }
 
+    this.renewal.update(this.restoration)
+    this.liquid.uniforms.uRenew.value = this.restoration
+    if (this.weather && this.weather.kind === 'ash') {
+      // The ash stops falling.
+      this.weather.uniforms.uOpacity.value = 0.9 * (1 - this.restoration)
+      this.weather.points.visible = this.restoration < 0.99
+    }
     if (this.restoration > 0 && this.baseColors) {
       const r = this.restoration
       const warm = new THREE.Color(this.spec.palette.accent)
@@ -463,6 +482,8 @@ export class World {
         .copy(this.baseColors.horizon)
         .lerp(warm, r * 0.3)
       this.hemi.color.copy(this.baseColors.hemiSky).lerp(warm, r * 0.2)
+      // A restored land is a brighter one.
+      this.hemi.intensity = this.hemiBase * (1 + 0.3 * r)
       const fog = this.scene.fog as THREE.FogExp2
       fog.density = this.fogBase * (1 - r * 0.45)
       fog.color.copy(this.sky.uniforms.uHorizon.value as THREE.Color)
@@ -471,6 +492,27 @@ export class World {
   }
 
   private fill!: THREE.AmbientLight
+  private renewal!: Renewal
+  private hemiBase = 1
+
+  /** After the finale, the wanderers come to stand around the heart. */
+  gatherWanderers(): void {
+    const h = this.heart.center
+    this.wanderers.forEach((w, i) => {
+      const a = (i / Math.max(1, this.wanderers.length)) * Math.PI * 2 + 0.6
+      for (let r = 24; r < 60; r += 4) {
+        const x = h.x + Math.cos(a) * r
+        const z = h.z + Math.sin(a) * r
+        if (
+          (this.terrain.solidLiquid || this.terrain.isDry(x, z, 0.6)) &&
+          !this.colliders.occupied(x, z, 1)
+        ) {
+          w.moveHome(new THREE.Vector3(x, 0, z))
+          return
+        }
+      }
+    })
+  }
   private skyShift!: { top: SkyShift; horizon: SkyShift }
 
   /**
@@ -498,6 +540,7 @@ export class World {
 
     const low = 1 - THREE.MathUtils.smoothstep(sunDir.y, 0.05, 0.4)
     this.hemi.intensity = THREE.MathUtils.lerp(1.7 + low * 0.9, 1.5, night) * (1 + 0.3 * night)
+    this.hemiBase = this.hemi.intensity
     this.hemi.color
       .copy(top)
       .lerp(horizon, 0.5)

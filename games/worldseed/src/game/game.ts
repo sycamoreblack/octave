@@ -192,6 +192,7 @@ export class Game {
     for (const i of p.met) if (this.world.wanderers[i]) this.world.wanderers[i].met = true
     if (p.restored) {
       this.world.restoration = 1
+      this.world.gatherWanderers()
       this.world.heart.relic.visible = true
       ;(this.world.heart.ring.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.2
     } else if (p.collected.length >= SHARD_COUNT) {
@@ -871,6 +872,7 @@ export class Game {
     const s = this.spec.story
     this.progress.restored = true
     this.world.restoration = 1
+    this.world.gatherWanderers()
     this.addJournal({ kind: 'finale', title: `${s.relic}, restored`, text: s.finale.text })
     this.updateObjective()
     this.save()
