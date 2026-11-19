@@ -10,6 +10,8 @@ export interface SkyRig {
   lightDir: THREE.Vector3
   night: number
   update(t: number, camera: THREE.Camera): void
+  /** Move the sun (and the main light) to a new time of day. */
+  setTime(time: number): void
 }
 
 /** The sun's direction for a time of day in [0, 1). 0.5 = noon, 0.25 = sunrise in the east. */
@@ -171,7 +173,7 @@ export function buildSky(spec: WorldSpec, rng: Rng): SkyRig {
         ? sunDir.clone()
         : new THREE.Vector3(0.3, 0.8, 0.2).normalize()
 
-  return {
+  const rig: SkyRig = {
     mesh,
     uniforms,
     sunDir,
@@ -180,6 +182,19 @@ export function buildSky(spec: WorldSpec, rng: Rng): SkyRig {
     update(t, camera) {
       uniforms.uTime.value = t
       mesh.position.copy(camera.position)
+    },
+    setTime(time) {
+      rig.sunDir.copy(sunDirection(time, azimuth))
+      rig.night = THREE.MathUtils.smoothstep(-rig.sunDir.y, -0.05, 0.25)
+      // The light follows whichever of sun or moon is doing more of the lighting.
+      if (rig.sunDir.y > 0.02 || spec.moons === 0)
+        rig.lightDir.copy(
+          rig.sunDir.y > -0.05 ? rig.sunDir : new THREE.Vector3(0.3, 0.8, 0.2).normalize()
+        )
+      else rig.lightDir.copy(moonDirs[0])
+      uniforms.uSunDir.value = rig.sunDir
+      uniforms.uNight.value = rig.night
     }
   }
+  return rig
 }

@@ -31,6 +31,8 @@ export interface Progress {
   returned: number[]
   /** Recent free conversation with each wanderer, keyed by wanderer index. */
   chats: Record<string, { role: 'user' | 'assistant'; text: string }[]>
+  /** Time of day when last saved (absent: the world's described time). */
+  timeOfDay?: number
 }
 
 export interface SaveEntry {
@@ -53,6 +55,8 @@ export interface Settings {
   highContrast: boolean
   /** Fewer flashes and less automatic camera movement. */
   reduceMotion: boolean
+  /** Let the sun move: a full day passes in DAY_MINUTES. */
+  timePasses: boolean
   bindings: Bindings
 }
 
@@ -136,6 +140,7 @@ export function defaultSettings(): Settings {
     highContrast: false,
     reduceMotion:
       typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+    timePasses: false,
     bindings: { ...DEFAULT_BINDINGS }
   }
 }

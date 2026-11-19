@@ -270,6 +270,13 @@ const autoQ = $<HTMLInputElement>('#set-auto')
 const large = $<HTMLInputElement>('#set-large')
 const contrast = $<HTMLInputElement>('#set-contrast')
 const calm = $<HTMLInputElement>('#set-calm')
+const timeOn = $<HTMLInputElement>('#set-time')
+const hourSel = $<HTMLSelectElement>('#set-hour')
+timeOn.checked = settings.timePasses
+hourSel.onchange = () => {
+  if (hourSel.value) game?.setHour(parseFloat(hourSel.value))
+  hourSel.value = ''
+}
 autoQ.checked = settings.autoQuality
 large.checked = settings.largeText
 contrast.checked = settings.highContrast
@@ -291,14 +298,15 @@ function updateSettings(): void {
     autoQuality: autoQ.checked,
     largeText: large.checked,
     highContrast: contrast.checked,
-    reduceMotion: calm.checked
+    reduceMotion: calm.checked,
+    timePasses: timeOn.checked
   }
   storeSettings(settings)
   audio.setVolume(settings.volume, settings.music)
   applyAccessibility()
   game?.applySettings(settings)
 }
-for (const el of [volume, music, sens, invert, autoQ, large, contrast, calm])
+for (const el of [volume, music, sens, invert, autoQ, large, contrast, calm, timeOn])
   el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', updateSettings)
 qualitySel.onchange = () => {
   const q = qualitySel.value as Settings['quality']

@@ -44,6 +44,9 @@ function compassWord(dx: number, dz: number): string {
   return DIRS[(Math.round(a / (Math.PI / 4)) + 8) % 8]
 }
 
+/** Real minutes for a full day when time passes. */
+export const DAY_MINUTES = 20
+
 const howFar = (d: number): string =>
   d < 160 ? 'not far' : d < 380 ? 'a fair walk' : 'a long way off'
 
@@ -148,6 +151,11 @@ export class Game {
     this.player.place(pp?.x ?? spawn.x, pp?.z ?? spawn.z, pp?.facing ?? spawn.yaw)
     this.follow.snap(this.player.facing)
     this.map.restore(this.progress.explored)
+    if (
+      typeof this.progress.timeOfDay === 'number' &&
+      Math.abs(this.progress.timeOfDay - this.spec.timeOfDay) > 1e-4
+    )
+      this.setHour(this.progress.timeOfDay)
     this.applyProgress()
 
     this.player.onStep = (s) => this.audio.step(s)
@@ -274,6 +282,8 @@ export class Game {
     this.handleGlobalKeys()
 
     if (playing) this.progress.playTime += dt
+    if (this.settings.timePasses && (playing || photo || this.mode === 'chat'))
+      this.setHour(this.world.timeOfDay + dt / (DAY_MINUTES * 60))
     if (!photo) this.player.update(dt, t, this.input, this.follow.yaw)
     const speed = Math.hypot(this.player.velocity.x, this.player.velocity.z)
     this.follow.update(dt, this.input, this.player.position, this.player.facing, speed)
@@ -1040,6 +1050,7 @@ export class Game {
     }
     this.progress.explored = this.map.serialize()
     this.progress.distance = this.distanceAtLoad + this.player.distance
+    this.progress.timeOfDay = this.world.timeOfDay
     storeSave({
       id: worldId(this.spec),
       spec: this.spec,
@@ -1062,6 +1073,14 @@ export class Game {
     }
     this.world.reduceFlashes = s.reduceMotion
     if (!s.autoQuality) this.perf.samples = []
+  }
+
+  /** Jump (or step) to a time of day, updating everything that depends on light. */
+  setHour(t: number): void {
+    this.world.setTime(t)
+    const night = this.world.sky.night
+    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(1.1, 1.4, night)
+    this.player?.setLamp(night > 0.5 || this.spec.weather === 'storm')
   }
 
   // ---------------- adaptive quality ----------------

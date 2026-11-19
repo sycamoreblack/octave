@@ -15,6 +15,7 @@ import { Wanderer } from './npc'
 import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, WAYSTONES, type WorldSpec } from './spec'
 import { Echo, findSpot, LostItem, Seal, Waystone } from './objectives'
 import { LAND_RADIUS } from './terrain'
+import { measureShift, worldSkyAt, type SkyShift } from './daycycle'
 
 export interface Quality {
   /** Multiplier on flora/particle counts. */
@@ -218,6 +219,8 @@ export class World {
             night > 0.5 ? 0.45 : 0.3
           )
     this.scene.add(fill)
+    this.fill = fill
+    this.skyShift = measureShift(spec.palette, spec.timeOfDay)
     this.baseColors = {
       top: (this.sky.uniforms.uTop.value as THREE.Color).clone(),
       horizon: (this.sky.uniforms.uHorizon.value as THREE.Color).clone(),
@@ -465,6 +468,64 @@ export class World {
       fog.color.copy(this.sky.uniforms.uHorizon.value as THREE.Color)
       this.sky.uniforms.uAurora.value = Math.max(this.spec.aurora ? 1 : 0, r * (this.night ? 1 : 0))
     }
+  }
+
+  private fill!: THREE.AmbientLight
+  private skyShift!: { top: SkyShift; horizon: SkyShift }
+
+  /**
+   * Move the world to a new time of day: sun and moon, sky colours (keeping this world's
+   * own tint), light strength and colour, fog, and the water's reflections.
+   */
+  setTime(t: number): void {
+    const spec = this.spec
+    this.timeOfDay = ((t % 1) + 1) % 1
+    this.sky.setTime(this.timeOfDay)
+    const night = this.sky.night
+    const sunDir = this.sky.sunDir
+    const colors = worldSkyAt(this.timeOfDay, this.skyShift)
+    const top = new THREE.Color(colors.top)
+    const horizon = new THREE.Color(colors.horizon)
+    const sunColor = new THREE.Color(colors.sun)
+    const storm = spec.weather === 'storm' ? 0.6 : 1
+
+    // Sun by day, moonlight by night, never fully dark.
+    const day = THREE.MathUtils.smoothstep(sunDir.y, -0.05, 0.15)
+    const moon = 0.9 * night * (spec.moons > 0 ? 1 : 0.7)
+    this.sun.intensity = Math.max(2.8 * day, moon) * storm
+    this.sun.color.copy(day * 2.8 >= moon ? sunColor : new THREE.Color('#c8d4ff'))
+    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sky.lightDir, 200)
+
+    const low = 1 - THREE.MathUtils.smoothstep(sunDir.y, 0.05, 0.4)
+    this.hemi.intensity = THREE.MathUtils.lerp(1.7 + low * 0.9, 1.5, night) * (1 + 0.3 * night)
+    this.hemi.color
+      .copy(top)
+      .lerp(horizon, 0.5)
+      .lerp(new THREE.Color('#7f96d8'), 0.6 * night)
+    if (spec.liquid !== 'lava') {
+      this.fill.color.copy(horizon).lerp(new THREE.Color('#ffffff'), 0.5)
+      this.fill.intensity = THREE.MathUtils.lerp(0.3, 0.45, night)
+    }
+
+    if (this.baseColors) {
+      this.baseColors.top.copy(top)
+      this.baseColors.horizon.copy(horizon)
+      this.baseColors.hemiSky.copy(this.hemi.color)
+    }
+    const u = this.sky.uniforms
+    ;(u.uTop.value as THREE.Color).copy(top)
+    ;(u.uHorizon.value as THREE.Color).copy(horizon)
+    ;(u.uGround.value as THREE.Color).copy(horizon).multiplyScalar(0.6)
+    ;(u.uSunColor.value as THREE.Color).copy(sunColor)
+    const fog = this.scene.fog as THREE.FogExp2
+    fog.color.copy(horizon)
+    ;(this.scene.background as THREE.Color).copy(horizon)
+
+    const lu = this.liquid.uniforms
+    ;(lu.uSunDir.value as THREE.Vector3).copy(sunDir)
+    ;(lu.uSunColor.value as THREE.Color).copy(sunColor)
+    ;(lu.uSky.value as THREE.Color).copy(horizon)
+    lu.uSunPower.value = sunDir.y > 0 ? 1 : 0.3
   }
 
   onLightning?: () => void

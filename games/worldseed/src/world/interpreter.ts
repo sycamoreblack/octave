@@ -504,7 +504,7 @@ const BASE_GROUND: Record<
   }
 }
 
-function skyFor(t: number): { top: HSL; horizon: HSL; sun: string } {
+export function skyFor(t: number): { top: HSL; horizon: HSL; sun: string } {
   if (t < 0.17 || t > 0.86)
     return {
       top: { h: 0.64, s: 0.55, l: 0.05 },
