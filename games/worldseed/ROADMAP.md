@@ -43,6 +43,14 @@ Done:
 
 Open: snow particles bloom too much, the alien sky is washed out, a tuning pass across biomes, and like-for-like performance numbers.
 
+## Visual polish *(planned — see docs/PLAN-visual-polish.md)*
+
+Milestones M0–M7:
+- terrain splatting, triplanar detail and grounded props
+- camera-following instanced ground cover with trails and variation
+- atmosphere alignment, bloom by intent and per-mood grading
+- character and landmark readability
+
 ## Next ideas
 
 - Caves (a separate mesh layer under cliffs) and settlements (clusters of hamlets with paths between them).
