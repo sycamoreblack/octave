@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { Input } from '../engine/input'
-import { AudioEngine } from '../engine/audio'
+import { Input, type Action } from '../engine/input'
+import { AudioEngine, type Ambience } from '../engine/audio'
 import { World, QUALITY, type ShardNode } from '../world/world'
 import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, type WorldSpec } from '../world/spec'
 import type { Waystone } from '../world/objectives'
@@ -18,7 +18,7 @@ import {
   type Settings
 } from './save'
 
-type Mode = 'loading' | 'playing' | 'card' | 'journal' | 'map' | 'paused'
+type Mode = 'loading' | 'playing' | 'card' | 'journal' | 'map' | 'paused' | 'photo'
 
 type Target =
   | { kind: 'shard'; node: ShardNode }
@@ -107,6 +107,7 @@ export class Game {
     this.world = new World(this.spec, q)
     await this.world.build(onProgress)
     this.world.onLightning = () => this.audio.thunder()
+    this.world.reduceFlashes = this.settings.reduceMotion
 
     // Nothing past where fog is ~opaque needs drawing; keep beacons (≤1.2 km away) in range.
     const fog = this.world.scene.fog as THREE.FogExp2
@@ -123,7 +124,8 @@ export class Game {
     this.world.scene.add(this.player.object)
     this.follow = new FollowCamera(this.camera, this.world.terrain, this.world.colliders, {
       sensitivity: this.settings.sensitivity,
-      invertY: this.settings.invertY
+      invertY: this.settings.invertY,
+      autoFollow: !this.settings.reduceMotion
     })
     this.map = new WorldMap(this.world)
 
@@ -215,11 +217,7 @@ export class Game {
       })
       this.mode = 'playing'
       this.hud.showBanner('You arrive in', this.spec.name, 4.5)
-      this.hud.toast(
-        this.input.touchActive || matchMedia('(pointer: coarse)').matches
-          ? 'Drag on the left to move, on the right to look. Tap <b>E</b> to interact.'
-          : 'Click to look around. <b>WASD</b> to move, <b>Space</b> to jump (hold to glide), <b>E</b> to interact.'
-      )
+      this.hud.toast(this.controlsHint())
       this.hud.toast(`Follow the pillars of light. Someone nearby might have advice.`)
     } else {
       this.mode = 'playing'
@@ -228,11 +226,28 @@ export class Game {
     this.save()
   }
 
+  /** A one-line how-to-play, worded for whatever the player is holding. */
+  private controlsHint(): string {
+    const i = this.input
+    if (i.device === 'pad')
+      return 'Left stick to move, right stick to look. <b>A</b> to jump (hold to glide), <b>X</b> to interact, <b>R3</b> for photos.'
+    if (i.touchActive || matchMedia('(pointer: coarse)').matches)
+      return 'Drag on the left to move, on the right to look. Tap <b>E</b> to interact.'
+    const move = [i.label('forward'), i.label('left'), i.label('back'), i.label('right')].join('')
+    return `Click to look around. <b>${esc(move)}</b> to move, <b>${esc(i.label('jump'))}</b> to jump (hold to glide), <b>${esc(i.label('interact'))}</b> to interact.`
+  }
+
+  private key(action: Action): string {
+    return `<kbd>${esc(this.input.label(action))}</kbd>`
+  }
+
   private loop = (): void => {
     if (!this.running) return
     this.raf = requestAnimationFrame(this.loop)
-    const dt = Math.min(0.05, this.clock.getDelta())
+    const raw = this.clock.getDelta()
+    const dt = Math.min(0.05, raw)
     this.time += dt
+    this.watchPerformance(raw)
     this.update(dt)
     this.renderer.render(this.world.scene, this.camera)
     this.input.endFrame()
@@ -241,11 +256,13 @@ export class Game {
   private update(dt: number): void {
     const t = this.time
     const playing = this.mode === 'playing'
-    this.input.enabled = playing
+    const photo = this.mode === 'photo'
+    // In photo mode the camera still listens to look and zoom, but the player stands still.
+    this.input.enabled = playing || photo
     this.handleGlobalKeys()
 
     if (playing) this.progress.playTime += dt
-    this.player.update(dt, t, this.input, this.follow.yaw)
+    if (!photo) this.player.update(dt, t, this.input, this.follow.yaw)
     const speed = Math.hypot(this.player.velocity.x, this.player.velocity.z)
     this.follow.update(dt, this.input, this.player.position, this.player.facing, speed)
     this.world.update(t, dt, this.camera, this.player.position)
@@ -257,6 +274,7 @@ export class Game {
     if (this.checkTimer <= 0) {
       this.checkTimer = 0.25
       if (playing) this.checkDiscoveries()
+      this.audio.setAmbience(this.ambience())
       if (this.map.reveal(this.player.position.x, this.player.position.z))
         this.progress.explored = this.map.serialize()
     }
@@ -283,22 +301,23 @@ export class Game {
   }
 
   private handleGlobalKeys(): void {
-    const raw = (code: string): boolean => {
-      // Global keys work in every mode, so read them regardless of input.enabled.
-      const was = this.input.enabled
-      this.input.enabled = true
-      const p = this.input.pressed(code)
-      this.input.enabled = was
-      return p
-    }
+    // Global keys work in every mode, so read them regardless of input.enabled.
+    const hit = (a: Action): boolean => this.input.hitAlways(a)
     if (this.mode === 'card' || this.mode === 'loading') return
-    if (raw('KeyJ')) this.togglePanel('journal')
-    else if (raw('KeyM')) this.togglePanel('map')
-    else if (raw('Escape') || raw('KeyP')) {
+    if (this.mode === 'photo') {
+      if (hit('photo') || hit('pause')) this.setPhoto(false)
+      else if (hit('jump')) void this.capture()
+      else if (this.input.pressed('KeyH')) this.player.object.visible = !this.player.object.visible
+      return
+    }
+    if (hit('journal')) this.togglePanel('journal')
+    else if (hit('map')) this.togglePanel('map')
+    else if (hit('pause')) {
       if (this.mode === 'playing') this.pause(true)
       // The Escape that released pointer lock may also arrive as a keypress: don't let it un-pause.
       else if (performance.now() - this.pausedAt > 300) this.closePanels()
-    } else if (raw('KeyE') && this.mode === 'playing') this.interact()
+    } else if (hit('photo') && this.mode === 'playing') this.setPhoto(true)
+    else if (hit('interact') && this.mode === 'playing') this.interact()
   }
 
   togglePanel(which: 'journal' | 'map'): void {
@@ -333,11 +352,17 @@ export class Game {
       this.pausedAt = performance.now()
       this.unlockPointer()
       document.getElementById('pause')!.classList.remove('hidden')
+      if (this.input.device === 'pad') document.getElementById('resume')?.focus()
       this.save()
     } else this.closePanels()
   }
 
   closePanels(resume = true): void {
+    // Any open menu ends a conversation; it would otherwise sit behind the panel.
+    if (!resume || this.mode === 'playing') {
+      this.talking = null
+      this.hud.hideDialogue()
+    }
     for (const id of ['journal', 'map', 'pause'])
       document.getElementById(id)!.classList.add('hidden')
     if (resume && this.mode !== 'card' && this.mode !== 'loading') this.mode = 'playing'
@@ -360,7 +385,7 @@ export class Game {
   }
 
   canvasClicked(): void {
-    if (this.mode === 'playing') this.input.requestLock()
+    if (this.mode === 'playing' || this.mode === 'photo') this.input.requestLock()
   }
 
   // ---------------- interaction ----------------
@@ -417,7 +442,7 @@ export class Game {
 
   private hintFor(t: Target | null): string {
     if (!t || this.talking) return ''
-    const key = '<kbd>E</kbd>'
+    const key = this.key('interact')
     if (t.kind === 'shard') {
       if (t.node.seal.sealed) {
         const awake = t.node.stones.filter((s) => s.awake).length
@@ -460,7 +485,7 @@ export class Game {
     if (request) lines.push(request)
     lines.push(this.hintLine(w.position))
     this.talking = { index, line: 0, lines }
-    this.hud.showDialogue(w.story.name, w.story.epithet, lines[0])
+    this.hud.showDialogue(w.story.name, w.story.epithet, lines[0], this.input.label('interact'))
     this.audio.blip()
     if (first) {
       w.met = true
@@ -528,7 +553,7 @@ export class Game {
     this.map.reveal(best.at.x, best.at.z, 140)
     this.progress.explored = this.map.serialize()
     this.hud.toast(
-      `<b>${esc(name)}</b> marked <b>${esc(best.name)}</b> on your map. Press <b>M</b> to look.`
+      `<b>${esc(name)}</b> marked <b>${esc(best.name)}</b> on your map. Press <b>${esc(this.input.label('map'))}</b> to look.`
     )
   }
 
@@ -583,7 +608,12 @@ export class Game {
       return
     }
     const w = this.world.wanderers[this.talking.index]
-    this.hud.showDialogue(w.story.name, w.story.epithet, this.talking.lines[this.talking.line])
+    this.hud.showDialogue(
+      w.story.name,
+      w.story.epithet,
+      this.talking.lines[this.talking.line],
+      this.input.label('interact')
+    )
     this.audio.blip()
   }
 
@@ -882,7 +912,148 @@ export class Game {
 
   applySettings(s: Settings): void {
     this.settings = s
-    this.follow.settings = { sensitivity: s.sensitivity, invertY: s.invertY }
+    this.follow.settings = {
+      sensitivity: s.sensitivity,
+      invertY: s.invertY,
+      autoFollow: !s.reduceMotion
+    }
+    this.world.reduceFlashes = s.reduceMotion
+    if (!s.autoQuality) this.perf.samples = []
+  }
+
+  // ---------------- adaptive quality ----------------
+
+  /** How far we've stepped down: 0 = as configured. */
+  private perf = { samples: [] as number[], level: 0, settledAt: 0 }
+
+  /**
+   * Watch real frame times; if a device can't keep ~28 fps, step down resolution and
+   * then shadows, a step at a time. Never steps up, so it can't oscillate.
+   */
+  private watchPerformance(raw: number): void {
+    if (!this.settings.autoQuality || this.mode !== 'playing' || this.time < 4) return
+    if (this.time < this.perf.settledAt) return
+    this.perf.samples.push(raw)
+    if (this.perf.samples.length < 90) return
+    const sorted = [...this.perf.samples].sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
+    this.perf.samples = []
+    if (median < 1 / 28 || this.perf.level >= 3) return
+    this.perf.level++
+    const q = QUALITY[this.settings.quality]
+    const ratio = [q.pixelRatio, Math.min(q.pixelRatio, 1.25), 1, 0.75][this.perf.level]
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, ratio))
+    if (this.perf.level >= 2 && this.world.sun.castShadow) {
+      this.world.sun.castShadow = false
+      this.renderer.shadowMap.enabled = false
+      this.world.scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+        for (const mat of Array.isArray(m) ? m : m ? [m] : []) mat.needsUpdate = true
+      })
+    }
+    // Give the new settings a moment before judging again.
+    this.perf.settledAt = this.time + 3
+    if (this.perf.level === 1)
+      this.hud.toast(
+        'Lowered the rendering detail to keep things smooth. You can turn this off in Settings.'
+      )
+  }
+
+  // ---------------- photo mode ----------------
+
+  setPhoto(on: boolean): void {
+    if (on === (this.mode === 'photo')) return
+    this.mode = on ? 'photo' : 'playing'
+    this.follow.free = on
+    this.hud.show(!on)
+    document.body.classList.toggle('photo', on)
+    document.getElementById('photo-bar')!.classList.toggle('hidden', !on)
+    if (on) {
+      const pad = this.input.device === 'pad'
+      document.getElementById('photo-keys')!.innerHTML = pad
+        ? `${this.key('jump')} save photo · ${this.key('photo')} or ${this.key('pause')} exit · right stick to orbit, <kbd>LB</kbd>/<kbd>RB</kbd> to zoom`
+        : `${this.key('jump')} save photo · <kbd>H</kbd> hide yourself · ${this.key('photo')} or ${this.key('pause')} exit · move the mouse to orbit, scroll to zoom`
+      this.hud.setHint('')
+      this.hud.hideDialogue()
+      this.talking = null
+    } else {
+      this.player.object.visible = true
+    }
+  }
+
+  /** Save the current view as a PNG with the world's name in the corner. */
+  private async capture(): Promise<void> {
+    this.renderer.render(this.world.scene, this.camera)
+    const src = this.renderer.domElement
+    const out = document.createElement('canvas')
+    out.width = src.width
+    out.height = src.height
+    const ctx = out.getContext('2d')!
+    // Read the WebGL canvas in the same task as the render, before the buffer is cleared.
+    ctx.drawImage(src, 0, 0)
+    const h = out.height
+    const pad = Math.round(h * 0.035)
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'
+    ctx.shadowBlur = h * 0.01
+    ctx.fillStyle = '#fff6e6'
+    ctx.font = `600 ${Math.round(h * 0.05)}px "Cormorant Garamond", Georgia, serif`
+    ctx.fillText(this.spec.name, pad, h - pad - h * 0.035)
+    ctx.font = `italic 500 ${Math.round(h * 0.024)}px "Cormorant Garamond", Georgia, serif`
+    ctx.fillStyle = 'rgba(255,246,230,0.85)'
+    const prompt =
+      this.spec.prompt.length > 110 ? this.spec.prompt.slice(0, 108) + '…' : this.spec.prompt
+    ctx.fillText(`“${prompt}”`, pad, h - pad)
+    const flash = document.getElementById('photo-flash')!
+    flash.classList.remove('go')
+    void flash.offsetWidth
+    flash.classList.add('go')
+    this.audio.discover()
+    const blob = await new Promise<Blob | null>((r) => out.toBlob(r, 'image/png'))
+    if (!blob) return
+    const slug =
+      this.spec.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'world'
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `worldseed-${slug}-${Date.now().toString(36)}.png`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+    document.getElementById('photo-status')!.textContent = `Saved ${a.download}`
+    this.lastPhoto = a.download
+  }
+
+  /** Name of the last photo saved (for tests). */
+  lastPhoto = ''
+
+  // ---------------- ambience ----------------
+
+  /** Sample the player's surroundings for the place-dependent soundscape. */
+  private ambience(): Ambience {
+    const p = this.player.position
+    const t = this.world.terrain
+    let wet = 0
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2
+      if (t.groundAt(p.x + Math.cos(a) * 30, p.z + Math.sin(a) * 30) < t.liquidY - 0.5) wet++
+    }
+    const nearLiquid = wet / 8
+    const liquid = this.spec.liquid
+    const grassy =
+      this.spec.flora.kinds.some((k) => k === 'grass' || k === 'flower' || k === 'reeds') &&
+      !['desert', 'volcanic', 'tundra'].includes(this.spec.biome)
+    return {
+      coast:
+        liquid === 'water' || liquid === 'murk' ? nearLiquid * (liquid === 'murk' ? 0.4 : 1) : 0,
+      lava: liquid === 'lava' ? Math.max(nearLiquid, 0.15) : 0,
+      night: this.world.night,
+      crickets: grassy && this.spec.weather !== 'snow' && this.spec.weather !== 'storm',
+      frogs: this.spec.biome === 'swamp',
+      birds: this.spec.creatures.includes('birds') && grassy && this.spec.weather !== 'storm'
+    }
   }
 
   /** Debug/test hook: teleport and inspect. Not part of normal play. */

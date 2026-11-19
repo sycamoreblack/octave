@@ -835,3 +835,123 @@ body.touch #clickhint {
     transition-duration: 0.01s !important;
   }
 }
+
+/* ---------- photo mode ---------- */
+#photo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  font: 500 13px/1.6 var(--sans);
+  color: var(--ink-dim);
+  pointer-events: none;
+}
+#photo-bar b {
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+#photo-status:empty {
+  display: none;
+}
+#photo-status {
+  color: var(--ink);
+}
+#photo-flash {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 16;
+}
+#photo-flash.go {
+  animation: flash 0.5s ease-out;
+}
+@keyframes flash {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0;
+  }
+}
+body.photo #toasts {
+  display: none;
+}
+
+/* ---------- settings extras ---------- */
+.settings-head {
+  font: 600 11px/1 var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 10px 0 0;
+}
+.bindings {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  align-items: center;
+}
+.bindings button {
+  min-width: 84px;
+  padding: 7px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.bindings button.listening {
+  background: var(--accent);
+  color: #1b1408;
+}
+.small-btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  align-self: flex-start;
+}
+
+/* ---------- accessibility ---------- */
+body.a11y-large #hud,
+body.a11y-large #toasts,
+body.a11y-large .panel,
+body.a11y-large .card-inner,
+body.a11y-large #photo-bar {
+  zoom: 1.2;
+}
+body.a11y-contrast {
+  --glass: rgba(0, 0, 0, 0.88);
+  --glass-strong: rgba(0, 0, 0, 0.95);
+  --ink-dim: rgba(255, 255, 255, 0.92);
+  --ink-faint: rgba(255, 255, 255, 0.75);
+  --line: rgba(255, 255, 255, 0.5);
+}
+body.a11y-contrast #compass {
+  background: rgba(0, 0, 0, 0.8);
+}
+body.a11y-contrast #objective,
+body.a11y-contrast #banner {
+  text-shadow:
+    0 0 4px #000,
+    0 0 8px #000;
+}
+body.a11y-calm *,
+body.a11y-calm *::before,
+body.a11y-calm *::after {
+  animation-duration: 0.01s !important;
+  transition-duration: 0.01s !important;
+}
+body.a11y-calm #photo-flash.go {
+  animation: none;
+}

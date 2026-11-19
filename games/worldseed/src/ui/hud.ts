@@ -87,8 +87,9 @@ export class Hud {
     window.setTimeout(() => el.remove(), 6200)
   }
 
-  showDialogue(name: string, epithet: string, line: string): void {
+  showDialogue(name: string, epithet: string, line: string, key = 'E'): void {
     this.dialogue.classList.remove('hidden')
+    this.dialogue.querySelector('.more')!.textContent = `${key} ▸`
     this.dialogue.querySelector('.who b')!.textContent = name
     this.dialogue.querySelector('.who span')!.textContent = epithet
     this.dialogue.querySelector('.line')!.textContent = line

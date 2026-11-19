@@ -35,16 +35,28 @@ WORLDSEED_AI=1 npm run dev
 
 ## Controls
 
-| Action | Keyboard / mouse | Touch |
-| --- | --- | --- |
-| Move | <kbd>WASD</kbd> / arrows | Drag on the left half |
-| Look | Click, then move the mouse (or drag) | Drag on the right half |
-| Run | <kbd>Shift</kbd> | ⇧ button (toggle) |
-| Jump / glide | <kbd>Space</kbd> (hold while falling to glide) | ⤒ button |
-| Interact, talk, take | <kbd>E</kbd> | E button |
-| Journal / map | <kbd>J</kbd> / <kbd>M</kbd> | ☰ menu |
-| Zoom | Mouse wheel, <kbd>+</kbd> / <kbd>−</kbd> | — |
-| Pause and settings | <kbd>Esc</kbd> | ☰ menu |
+| Action | Keyboard / mouse | Controller | Touch |
+| --- | --- | --- | --- |
+| Move | <kbd>WASD</kbd> / arrows | Left stick | Drag on the left half |
+| Look | Click, then move the mouse (or drag) | Right stick | Drag on the right half |
+| Run | <kbd>Shift</kbd> | RT or L3 | ⇧ button (toggle) |
+| Jump / glide | <kbd>Space</kbd> (hold while falling to glide) | A | ⤒ button |
+| Interact, talk, take | <kbd>E</kbd> | X | E button |
+| Journal / map | <kbd>J</kbd> / <kbd>M</kbd> | Y / View | ☰ menu |
+| Photo mode | <kbd>F</kbd> | R3 | ☰ menu |
+| Zoom | Mouse wheel, <kbd>+</kbd> / <kbd>−</kbd> | LB / RB | — |
+| Pause and settings | <kbd>Esc</kbd> or <kbd>P</kbd> | Menu | ☰ menu |
+
+All keyboard keys can be rebound in **Pause → Controls**. Choosing a key that's already in use swaps the two. Hints and dialogue always show the key or button for the device you last used.
+
+With a controller, menus, story cards and the title screen work without a mouse. The d-pad or left stick moves between options, A chooses, B goes back, left/right adjusts sliders and the quality picker, and the right stick scrolls long panels.
+
+**Photo mode** hides the HUD and freezes you in place so you can orbit further out and lower down. Press jump to save a PNG with the world's name and your description in the corner. <kbd>H</kbd> hides your character.
+
+**Settings** also include:
+- **Auto-detail.** If frames drop below about 28 fps, the game lowers resolution and then turns off shadows. Picking a quality by hand turns this off.
+- **Larger text and a high-contrast HUD.**
+- **Reduce flashes and camera motion.** This removes the lightning flash and stops the camera swinging behind you on its own. It defaults to on if your system asks for reduced motion.
 
 You can swim in water and murk. Ice and lava have a solid crust you can walk on.
 
@@ -92,6 +104,7 @@ src/
     sky.ts liquid.ts weather.ts fauna.ts beacon.ts npc.ts character.ts
     objectives.ts    waystones, seals, lost items, echoes, spot finding
     world.ts         assembles a scene from a WorldSpec
+  engine/gamepad.ts  controller play and menu navigation (Gamepad API)
   story/
     narrator.ts      offline storyteller (grammar tables keyed by biome and mood)
     ai.ts            client for the optional Claude endpoint
@@ -106,7 +119,8 @@ server/genesis.ts    Vite middleware for /api/status and /api/genesis
 Notes:
 
 - **Physics matches the picture.** Ground height is read from the baked grid using the mesh's own triangle split, so feet sit on the rendered surface. Dais steps, stairs and plinths are registered as walkable platforms.
-- **Performance.** Plants are instanced per spatial chunk, so the camera and the shadow camera can cull whole groves. Weather particles move entirely on the GPU. The far plane follows fog density. Phones default to Low quality.
+- **Performance.** Plants are instanced per spatial chunk, so the camera and the shadow camera can cull whole groves. Weather particles move entirely on the GPU. The far plane follows fog density. Phones default to Low quality, and auto-detail handles slow devices.
+- **Sound by place.** All sound is generated at runtime. On top of the mood-based music, surf swells near open water, lava rumbles, crickets chirp in grassy places at night, frogs croak in the fens, and birds sing by day where there are birds. Wind gets stronger with altitude.
 - **Saving.** Progress (pieces found, places discovered, people met, journal, explored map, position) autosaves to `localStorage` per world. The title screen lists your worlds to continue or forget.
 - **Robustness.** Storage access is guarded everywhere. Specs from Claude, share links and old saves all pass through `normalizeSpec()`.
 

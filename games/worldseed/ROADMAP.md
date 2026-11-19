@@ -11,15 +11,19 @@ What a playthrough looks like today: describe a world → walk to four pillars o
 | 1.3 ✅ | **Echoes.** Twelve drifting motes of memory scattered over the land. Walk through one to hear a one-line memory of the world before. | Rewards wandering off the straight path and adds world texture in small pieces. | Picked up automatically. They appear on the compass when near, gather in the journal, and are counted in the map title and epilogue. Saved. |
 | 1.4 ✅ | **Claude writes them too.** Add echoes and requests to the Claude schema. Old saves and share links still load. | The Claude path stays a complete story writer. | `normalizeSpec` fills any missing pieces from the offline story. Old saves migrate. Tests cover this. |
 
-## Phase 2 — Feel and reach *(next)*
+## Phase 2 — Feel and reach *(done)*
 
-- **Gamepad support** (Gamepad API): stick movement, camera, A to jump, X to interact, Start to pause.
-- **Adaptive quality.** Watch the frame time for the first few seconds and step quality down when a device struggles. Turned off if the player picks a quality manually.
-- **Photo mode** (<kbd>F</kbd>; <kbd>P</kbd> already pauses): hide the HUD, orbit freely, and save a PNG with the world's name in the corner.
-- **Ambient sound by place:** surf near the coast, crickets at night, wind on peaks, a crackling hum near lava.
-- **Accessibility:** key remapping, reduced camera bob, text size setting, high-contrast HUD.
+| # | Feature | Status |
+| --- | --- | --- |
+| 2.1 ✅ | **Controller support.** Play with sticks and buttons, and navigate the title screen, story cards and menus too (focus, sliders, scrolling). Hints show button names whenever a controller was used last. | Done |
+| 2.2 ✅ | **Auto-detail.** Watches real frame times. Below about 28 fps it steps down resolution, then shadows, one step at a time, and never steps back up, so it can't oscillate. Picking a quality by hand turns it off. | Done |
+| 2.3 ✅ | **Photo mode** (<kbd>F</kbd> / R3). Hides the HUD, freezes you in place, widens the orbit, saves a captioned PNG, and <kbd>H</kbd> hides you. | Done |
+| 2.4 ✅ | **Sound by place.** Surf near water, lava rumble, crickets at night, frogs in fens, birdsong by day, and wind that grows with altitude. | Done |
+| 2.5 ✅ | **Accessibility.** Remappable keys (with swap on conflict), larger text, a high-contrast HUD, and fewer flashes and less camera motion (honours `prefers-reduced-motion`). | Done |
 
-## Phase 3 — A living story
+Not yet: rebinding controller buttons, and on-screen glyphs drawn as button icons instead of letters.
+
+## Phase 3 — A living story *(next)*
 
 - **Talk freely with wanderers (Claude, optional).** Type anything; they answer in character, knowing the world, the relic and your progress. Falls back to scripted lines offline.
 - **Time passes (optional).** A slow day/night cycle, or "rest at a campfire" to change the hour. The world's described time stays the default.

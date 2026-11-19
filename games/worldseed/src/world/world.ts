@@ -440,7 +440,7 @@ export class World {
       flash.value = Math.max(0, (flash.value as number) - dt * 3)
       if (this.lightningTimer < 0) {
         this.lightningTimer = 5 + Math.random() * 10
-        flash.value = 0.9
+        flash.value = this.reduceFlashes ? 0.08 : 0.9
         this.onLightning?.()
       }
       this.hemi.intensity = 0.9 + (flash.value as number) * 2
@@ -465,6 +465,8 @@ export class World {
   }
 
   onLightning?: () => void
+  /** Accessibility: no sky flash for lightning (the thunder still rolls). */
+  reduceFlashes = false
 
   dispose(): void {
     this.scene.traverse((o) => {

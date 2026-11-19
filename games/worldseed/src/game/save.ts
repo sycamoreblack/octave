@@ -1,3 +1,4 @@
+import { DEFAULT_BINDINGS, type Bindings } from '../engine/input'
 import type { WorldSpec } from '../world/spec'
 
 /**
@@ -44,6 +45,13 @@ export interface Settings {
   sensitivity: number
   invertY: boolean
   useClaude: boolean
+  /** Lower resolution/shadows automatically if frames are slow. */
+  autoQuality: boolean
+  largeText: boolean
+  highContrast: boolean
+  /** Fewer flashes and less automatic camera movement. */
+  reduceMotion: boolean
+  bindings: Bindings
 }
 
 const SAVES = 'worldseed.saves.v1'
@@ -119,12 +127,21 @@ export function defaultSettings(): Settings {
     music: 0.7,
     sensitivity: 1,
     invertY: false,
-    useClaude: true
+    useClaude: true,
+    autoQuality: true,
+    largeText: false,
+    highContrast: false,
+    reduceMotion:
+      typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+    bindings: { ...DEFAULT_BINDINGS }
   }
 }
 
 export function loadSettings(): Settings {
-  return { ...defaultSettings(), ...read<Partial<Settings>>(SETTINGS, {}) }
+  const stored = read<Partial<Settings>>(SETTINGS, {})
+  const d = defaultSettings()
+  // Merge bindings key by key so new actions get defaults in old settings.
+  return { ...d, ...stored, bindings: { ...d.bindings, ...(stored.bindings ?? {}) } }
 }
 
 export function storeSettings(s: Settings): void {

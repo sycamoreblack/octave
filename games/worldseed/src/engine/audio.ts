@@ -16,6 +16,17 @@ const SCALES: Record<Mood, { root: number; steps: number[] }> = {
 
 const midi = (n: number): number => 440 * Math.pow(2, (n - 69) / 12)
 
+export interface Ambience {
+  /** 0..1 how much open water is near. */
+  coast: number
+  /** 0..1 how much lava is near. */
+  lava: number
+  night: boolean
+  crickets: boolean
+  frogs: boolean
+  birds: boolean
+}
+
 export class AudioEngine {
   private ctx: AudioContext | null = null
   private master!: GainNode
@@ -24,6 +35,18 @@ export class AudioEngine {
   private wind!: GainNode
   private windFilter!: BiquadFilterNode
   private rain!: GainNode
+  private surf!: GainNode
+  private lava!: GainNode
+  private amb: Ambience = {
+    coast: 0,
+    lava: 0,
+    night: false,
+    crickets: false,
+    frogs: false,
+    birds: false
+  }
+  private critterTimer = 2
+  private birdTimer = 4
   private delay!: DelayNode
   private noise!: AudioBuffer
   private voices: { osc: OscillatorNode[]; gain: GainNode }[] = []
@@ -92,6 +115,22 @@ export class AudioEngine {
     this.rain = ctx.createGain()
     this.rain.gain.value = 0
     this.loopNoise().connect(rf).connect(this.rain).connect(this.master)
+
+    // Surf: low, soft noise that swells and recedes like waves.
+    const sf = ctx.createBiquadFilter()
+    sf.type = 'lowpass'
+    sf.frequency.value = 520
+    this.surf = ctx.createGain()
+    this.surf.gain.value = 0
+    this.loopNoise().connect(sf).connect(this.surf).connect(this.master)
+
+    // Lava: a deep rumble.
+    const lf = ctx.createBiquadFilter()
+    lf.type = 'lowpass'
+    lf.frequency.value = 110
+    this.lava = ctx.createGain()
+    this.lava.gain.value = 0
+    this.loopNoise().connect(lf).connect(this.lava).connect(this.master)
   }
 
   private loopNoise(): AudioBufferSourceNode {
@@ -144,6 +183,8 @@ export class AudioEngine {
     this.running = false
     this.rain?.gain.setTargetAtTime(0, now, 0.5)
     this.wind?.gain.setTargetAtTime(0, now, 0.5)
+    this.surf?.gain.setTargetAtTime(0, now, 0.5)
+    this.lava?.gain.setTargetAtTime(0, now, 0.5)
   }
 
   private nextChord(): void {
@@ -217,11 +258,81 @@ export class AudioEngine {
     }
     const now = this.ctx.currentTime
     this.wind.gain.setTargetAtTime((0.03 + altitude * 0.12) * windy, now, 1)
+    const a = this.amb
+    const swell =
+      0.55 + 0.45 * Math.sin((now * Math.PI * 2) / 7.5) * Math.sin((now * Math.PI * 2) / 3.1 + 1)
+    this.surf.gain.setTargetAtTime(a.coast * 0.22 * Math.max(0.15, swell), now, 0.4)
+    this.lava.gain.setTargetAtTime(a.lava * 0.35, now, 1)
+
+    // Night critters: crickets in grass, frogs in the fens.
+    this.critterTimer -= dt
+    if (this.critterTimer <= 0 && a.night && (a.crickets || a.frogs)) {
+      if (a.frogs && Math.random() < 0.55) this.croak()
+      else if (a.crickets) this.chirp()
+      this.critterTimer = 0.35 + Math.random() * 1.1
+    }
+    // Daytime birdsong where there are birds and plants.
+    this.birdTimer -= dt
+    if (this.birdTimer <= 0 && !a.night && a.birds) {
+      this.song()
+      this.birdTimer = 3 + Math.random() * 7
+    }
     this.windFilter.frequency.setTargetAtTime(
       380 + altitude * 500 + Math.sin(now * 0.3) * 120,
       now,
       0.5
     )
+  }
+
+  /** Where the player is, for the place-dependent ambience. Called a few times a second. */
+  setAmbience(a: Ambience): void {
+    this.amb = a
+  }
+
+  private tone(
+    freq: number,
+    start: number,
+    dur: number,
+    gain: number,
+    type: OscillatorType = 'sine',
+    glideTo?: number
+  ): void {
+    const ctx = this.ctx!
+    const o = ctx.createOscillator()
+    o.type = type
+    o.frequency.setValueAtTime(freq, start)
+    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, start + dur)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, start)
+    g.gain.linearRampToValueAtTime(gain, start + Math.min(0.01, dur / 4))
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+    o.connect(g).connect(this.master)
+    o.start(start)
+    o.stop(start + dur + 0.02)
+  }
+
+  private chirp(): void {
+    const t0 = this.ctx!.currentTime
+    const f = 4200 + Math.random() * 700
+    for (let i = 0; i < 3; i++) this.tone(f, t0 + i * 0.05, 0.025, 0.012)
+  }
+
+  private croak(): void {
+    const t0 = this.ctx!.currentTime
+    this.tone(120 + Math.random() * 40, t0, 0.18, 0.04, 'square', 70)
+    if (Math.random() < 0.5)
+      this.tone(110 + Math.random() * 30, t0 + 0.25, 0.14, 0.03, 'square', 70)
+  }
+
+  private song(): void {
+    const t0 = this.ctx!.currentTime
+    const notes = 2 + Math.floor(Math.random() * 3)
+    let f = 2400 + Math.random() * 1500
+    for (let i = 0; i < notes; i++) {
+      const next = f * (Math.random() < 0.5 ? 1.2 : 0.85)
+      this.tone(f, t0 + i * 0.13, 0.1, 0.018, 'sine', next)
+      f = next
+    }
   }
 
   private burst(

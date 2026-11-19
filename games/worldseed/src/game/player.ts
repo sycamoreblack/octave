@@ -79,7 +79,7 @@ export class Player {
 
   update(dt: number, t: number, input: Input, cameraYaw: number): void {
     const axis = input.axis()
-    const running = input.isDown('ShiftLeft', 'ShiftRight')
+    const running = input.held('run')
     const fwd = new THREE.Vector3(Math.sin(cameraYaw), 0, Math.cos(cameraYaw))
     const right = new THREE.Vector3(-Math.cos(cameraYaw), 0, Math.sin(cameraYaw))
     const wish = fwd.multiplyScalar(axis.y).add(right.multiplyScalar(axis.x))
@@ -98,7 +98,7 @@ export class Player {
       speed *= 0.7
 
     // Jump input with buffer + coyote time, so jumps feel forgiving.
-    this.sinceJumpPressed = input.pressed('Space') ? 0 : this.sinceJumpPressed + dt
+    this.sinceJumpPressed = input.hit('jump') ? 0 : this.sinceJumpPressed + dt
     if (this.state.grounded) this.sinceGrounded = 0
     else this.sinceGrounded += dt
     if (
@@ -115,7 +115,7 @@ export class Player {
 
     // Glide: hold jump while falling.
     this.state.gliding =
-      !this.state.grounded && !this.state.swimming && this.velocity.y < 0 && input.isDown('Space')
+      !this.state.grounded && !this.state.swimming && this.velocity.y < 0 && input.held('jump')
     if (this.state.gliding) speed = Math.max(speed, GLIDE)
 
     // Horizontal velocity eases toward the wish; less control in the air.

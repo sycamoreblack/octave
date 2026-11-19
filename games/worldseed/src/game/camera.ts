@@ -7,6 +7,8 @@ import { Colliders } from '../engine/colliders'
 export interface CameraSettings {
   sensitivity: number
   invertY: boolean
+  /** Swing behind the player after a moment of no look input. */
+  autoFollow: boolean
 }
 
 /** Orbiting third-person camera with terrain avoidance, zoom, and gentle auto-follow. */
@@ -19,6 +21,8 @@ export class FollowCamera {
   private readonly target = new THREE.Vector3()
   private readonly desired = new THREE.Vector3()
   private initialized = false
+  /** Photo mode: zoom further out, look from further below/above, no auto-follow. */
+  free = false
 
   constructor(
     readonly camera: THREE.PerspectiveCamera,
@@ -43,17 +47,25 @@ export class FollowCamera {
     const lx = input.lookX
     const ly = input.lookY * (this.settings.invertY ? -1 : 1)
     this.yaw -= lx * s
-    this.pitch = clamp(this.pitch + ly * s, -0.45, 1.25)
-    if (input.wheel) this.targetDistance = clamp(this.targetDistance + input.wheel * 1.2, 3.5, 18)
+    const maxD = this.free ? 60 : 18
+    const minD = this.free ? 2 : 3.5
+    this.pitch = clamp(this.pitch + ly * s, this.free ? -0.9 : -0.45, this.free ? 1.45 : 1.25)
+    if (input.wheel)
+      this.targetDistance = clamp(
+        this.targetDistance + input.wheel * (this.free ? 2.5 : 1.2),
+        minD,
+        maxD
+      )
     if (input.isDown('Equal', 'NumpadAdd'))
-      this.targetDistance = clamp(this.targetDistance - dt * 8, 3.5, 18)
+      this.targetDistance = clamp(this.targetDistance - dt * 8, minD, maxD)
     if (input.isDown('Minus', 'NumpadSubtract'))
-      this.targetDistance = clamp(this.targetDistance + dt * 8, 3.5, 18)
+      this.targetDistance = clamp(this.targetDistance + dt * 8, minD, maxD)
+    if (!this.free && this.targetDistance > 18) this.targetDistance = 18
     if (Math.abs(lx) + Math.abs(ly) > 0) this.idle = 0
     else this.idle += dt
 
     // After a moment without mouse input, swing gently behind a moving player.
-    if (this.idle > 1.5 && playerSpeed > 2) {
+    if (this.settings.autoFollow && !this.free && this.idle > 1.5 && playerSpeed > 2) {
       let d = playerFacing - this.yaw
       d = Math.atan2(Math.sin(d), Math.cos(d))
       this.yaw += d * (1 - Math.exp(-dt * 0.8))

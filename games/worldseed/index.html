@@ -99,6 +99,13 @@
 
     <div id="toasts" aria-live="polite"></div>
 
+    <div id="photo-bar" class="hidden" role="status">
+      <b>Photo mode</b>
+      <span id="photo-keys"></span>
+      <span id="photo-status"></span>
+    </div>
+    <div id="photo-flash" aria-hidden="true"></div>
+
     <section id="journal" class="panel hidden" role="dialog" aria-label="Journal">
       <header>
         <h2>Journal</h2>
@@ -125,6 +132,7 @@
           <button class="primary" id="resume">Resume</button>
           <button id="open-journal">Journal <kbd>J</kbd></button>
           <button id="open-map">Map <kbd>M</kbd></button>
+          <button id="photo">Photo mode <kbd>F</kbd></button>
           <button id="share">Copy link to this world</button>
           <button id="new-world">New world</button>
         </div>
@@ -143,7 +151,23 @@
             >Look speed <input type="range" id="set-sens" min="0.3" max="2.5" step="0.1"
           /></label>
           <label class="check"><input type="checkbox" id="set-invert" /> Invert look</label>
+          <label class="check"
+            ><input type="checkbox" id="set-auto" /> Lower detail automatically if it
+            stutters</label
+          >
           <p class="small" id="quality-note">Quality changes apply to the next world you load.</p>
+          <h3 class="settings-head">Accessibility</h3>
+          <label class="check"><input type="checkbox" id="set-large" /> Larger text</label>
+          <label class="check"><input type="checkbox" id="set-contrast" /> High-contrast HUD</label>
+          <label class="check"
+            ><input type="checkbox" id="set-calm" /> Reduce flashes and camera motion</label
+          >
+          <h3 class="settings-head">Controls</h3>
+          <div id="bindings" class="bindings"></div>
+          <button id="reset-keys" class="small-btn">Reset keys</button>
+          <p class="small">
+            Controllers work too: left stick moves, right stick looks, A jumps, X interacts.
+          </p>
         </div>
       </div>
     </section>

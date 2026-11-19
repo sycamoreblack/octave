@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { Input } from './engine/input'
+import { ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS, Input, keyName } from './engine/input'
+import { GamepadInput } from './engine/gamepad'
 import { AudioEngine } from './engine/audio'
 import { Rng } from './engine/rng'
 import { Hud, esc } from './ui/hud'
@@ -45,6 +46,14 @@ const hud = new Hud()
 const audio = new AudioEngine()
 let settings: Settings = loadSettings()
 audio.setVolume(settings.volume, settings.music)
+input.bindings = { ...settings.bindings }
+
+function applyAccessibility(): void {
+  document.body.classList.toggle('a11y-large', settings.largeText)
+  document.body.classList.toggle('a11y-contrast', settings.highContrast)
+  document.body.classList.toggle('a11y-calm', settings.reduceMotion)
+}
+applyAccessibility()
 let game: Game | null = null
 let aiReady = false
 let sharedSpec: unknown = null
@@ -254,6 +263,14 @@ const volume = $<HTMLInputElement>('#set-volume')
 const music = $<HTMLInputElement>('#set-music')
 const sens = $<HTMLInputElement>('#set-sens')
 const invert = $<HTMLInputElement>('#set-invert')
+const autoQ = $<HTMLInputElement>('#set-auto')
+const large = $<HTMLInputElement>('#set-large')
+const contrast = $<HTMLInputElement>('#set-contrast')
+const calm = $<HTMLInputElement>('#set-calm')
+autoQ.checked = settings.autoQuality
+large.checked = settings.largeText
+contrast.checked = settings.highContrast
+calm.checked = settings.reduceMotion
 qualitySel.value = settings.quality
 volume.value = String(settings.volume)
 music.value = String(settings.music)
@@ -267,15 +284,25 @@ function updateSettings(): void {
     volume: +volume.value,
     music: +music.value,
     sensitivity: +sens.value,
-    invertY: invert.checked
+    invertY: invert.checked,
+    autoQuality: autoQ.checked,
+    largeText: large.checked,
+    highContrast: contrast.checked,
+    reduceMotion: calm.checked
   }
   storeSettings(settings)
   audio.setVolume(settings.volume, settings.music)
+  applyAccessibility()
   game?.applySettings(settings)
 }
-for (const el of [volume, music, sens, invert]) el.addEventListener('input', updateSettings)
+for (const el of [volume, music, sens, invert, autoQ, large, contrast, calm])
+  el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', updateSettings)
 qualitySel.onchange = () => {
   const q = qualitySel.value as Settings['quality']
+  // Choosing a quality by hand means the player wants that one: stop auto-adjusting.
+  autoQ.checked = false
+  settings = { ...settings, autoQuality: false }
+  storeSettings(settings)
   if (game) game.onRebuild?.(q)
   else {
     settings = { ...settings, quality: q }
@@ -290,6 +317,82 @@ $<HTMLButtonElement>('#resume').onclick = () => {
 $<HTMLButtonElement>('#open-journal').onclick = () => game?.togglePanel('journal')
 $<HTMLButtonElement>('#open-map').onclick = () => game?.togglePanel('map')
 $<HTMLButtonElement>('#share').onclick = () => void share()
+$<HTMLButtonElement>('#photo').onclick = () => {
+  game?.closePanels()
+  game?.setPhoto(true)
+}
+
+// ---------------- key remapping ----------------
+
+let listening: { action: (typeof ACTIONS)[number]; el: HTMLButtonElement } | null = null
+
+function renderBindings(): void {
+  const box = $('#bindings')
+  box.innerHTML = ACTIONS.map(
+    (a) =>
+      `<span>${esc(ACTION_LABELS[a])}</span><button type="button" data-action="${a}" aria-label="${esc(ACTION_LABELS[a])}: ${esc(keyName(settings.bindings[a]))}. Press to change.">${esc(keyName(settings.bindings[a]))}</button>`
+  ).join('')
+  box.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+    b.onclick = () => {
+      listening?.el.classList.remove('listening')
+      listening = { action: b.dataset.action as (typeof ACTIONS)[number], el: b }
+      b.classList.add('listening')
+      b.textContent = 'Press a key…'
+    }
+  })
+}
+
+function setBindings(next: Settings['bindings']): void {
+  settings = { ...settings, bindings: next }
+  input.bindings = { ...next }
+  storeSettings(settings)
+  renderBindings()
+}
+
+// Capture the next key for a binding before anything else sees it.
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (!listening) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    const { action } = listening
+    listening = null
+    if (e.code === 'Escape' || e.code === 'KeyP') return renderBindings()
+    const next = { ...settings.bindings }
+    // If another action had this key, it takes this action's old key (a swap).
+    const clash = ACTIONS.find((a) => a !== action && next[a] === e.code)
+    if (clash) next[clash] = next[action]
+    next[action] = e.code
+    setBindings(next)
+  },
+  true
+)
+$<HTMLButtonElement>('#reset-keys').onclick = () => setBindings({ ...DEFAULT_BINDINGS })
+renderBindings()
+
+// ---------------- controllers ----------------
+
+const pad = new GamepadInput(input)
+pad.uiRoot = () => {
+  const visible = (sel: string): HTMLElement | null => {
+    const el = document.querySelector<HTMLElement>(sel)
+    return el && !el.classList.contains('hidden') ? el : null
+  }
+  return (
+    visible('#card') ??
+    visible('#pause') ??
+    visible('#journal') ??
+    visible('#map') ??
+    (visible('#loading') ? document.createElement('div') : null) ??
+    visible('#title')
+  )
+}
+pad.onTitleConfirm = () => void begin()
+pad.onConnect = () =>
+  hud.toast(
+    'Controller connected. Left stick moves, right stick looks, <b>A</b> jumps, <b>X</b> interacts.'
+  )
 $<HTMLButtonElement>('#new-world').onclick = () => game?.onExit?.()
 $<HTMLButtonElement>('#touch-menu').addEventListener('touchstart', (e) => {
   e.preventDefault()
