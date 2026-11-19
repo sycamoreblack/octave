@@ -93,7 +93,10 @@ export class Player {
     this.state.swimming = deepWater && this.position.y <= liquid - SWIM_DEPTH + 0.35
     if (this.state.swimming && !wasSwimming) this.onSplash?.()
 
+    const wading =
+      !this.terrain.riversDry && this.terrain.rivers.wetAt(this.position.x, this.position.z, ground)
     let speed = this.state.swimming ? SWIM : running ? RUN : WALK
+    if (wading && this.state.grounded) speed *= 0.75
     if (this.terrain.spec.liquid === 'lava' && this.position.y <= liquid + 0.05 && ground < liquid)
       speed *= 0.7
 
@@ -214,7 +217,9 @@ export class Player {
     const stepPhase = Math.floor((this.stride * 1.25) / Math.PI)
     if (stepPhase !== this.lastStepPhase && (this.state.grounded || this.state.swimming)) {
       this.lastStepPhase = stepPhase
-      this.onStep?.(this.state.swimming || this.position.y < liquid + 0.1 ? 'water' : 'ground')
+      this.onStep?.(
+        this.state.swimming || wading || this.position.y < liquid + 0.1 ? 'water' : 'ground'
+      )
     }
 
     const root = this.figure.root

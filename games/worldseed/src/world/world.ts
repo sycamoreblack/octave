@@ -15,6 +15,7 @@ import { Wanderer } from './npc'
 import { ECHO_COUNT, QUEST_COUNT, SHARD_COUNT, WAYSTONES, type WorldSpec } from './spec'
 import { Echo, findSpot, LostItem, Seal, Waystone } from './objectives'
 import { Renewal } from './renewal'
+import { buildFloatingIsles, buildRivers, type IslesRig, type RiverRig } from './features'
 import { LAND_RADIUS } from './terrain'
 import { measureShift, worldSkyAt, type SkyShift } from './daycycle'
 
@@ -128,6 +129,12 @@ export class World {
     this.setupLights()
     this.liquid = buildLiquid(spec, this.terrain, this.sky.sunDir, this.sky.sunDir.y > 0 ? 1 : 0.3)
     this.scene.add(this.liquid.mesh)
+    this.river = buildRivers(spec, this.terrain)
+    if (this.river) this.scene.add(this.river.mesh)
+    if (spec.terrain.floating) {
+      this.isles = buildFloatingIsles(spec, this.terrain, rng.fork('isles'), this.quality.detail)
+      this.scene.add(this.isles.group)
+    }
 
     await step('Raising the old places', 0.45)
     this.buildLandmarks(rng.fork('landmarks'))
@@ -427,6 +434,14 @@ export class World {
           : 1
     this.sky.update(t, camera)
     this.liquid.uniforms.uTime.value = t
+    if (this.river) {
+      this.river.uniforms.uTime.value = t
+      this.river.uniforms.uRenew.value = this.restoration
+      ;(this.river.uniforms.uSky.value as THREE.Color).copy(
+        this.liquid.uniforms.uSky.value as THREE.Color
+      )
+    }
+    this.isles?.update(t)
     this.weather?.update(t, player)
     this.fauna.update(t, dt, player)
     for (const s of this.shards) {
@@ -493,6 +508,8 @@ export class World {
 
   private fill!: THREE.AmbientLight
   private renewal!: Renewal
+  river: RiverRig | null = null
+  private isles: IslesRig | null = null
   private hemiBase = 1
 
   /** After the finale, the wanderers come to stand around the heart. */

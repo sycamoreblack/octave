@@ -330,6 +330,7 @@ export function findSpot(
     if (terrain.slopeAt(x, z) > (o.maxSlope ?? 0.8)) continue
     if (colliders.occupied(x, z, 1.5)) continue
     if (terrain.platformAt(x, z) > -Infinity) continue
+    if (terrain.rivers.near(x, z, 1.3)) continue
     if (o.avoid.some((p) => Math.hypot(p.x - x, p.z - z) < o.gap)) continue
     return new THREE.Vector3(x, terrain.surfaceAt(x, z), z)
   }

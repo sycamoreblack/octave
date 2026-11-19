@@ -37,7 +37,10 @@ export class WorldMap {
         const z = -HALF + ((j + 0.5) / size) * WORLD_SIZE
         const h = terrain.groundAt(x, z)
         const rel = h - terrain.liquidY
-        if (rel < 0 && !terrain.solidLiquid) {
+        if (
+          (rel < 0 && !terrain.solidLiquid) ||
+          (!terrain.riversDry && terrain.rivers.wetAt(x, z, h))
+        ) {
           c.copy(water).multiplyScalar(1 - Math.min(0.5, -rel / 40))
         } else {
           const f = Math.max(0, rel) / span

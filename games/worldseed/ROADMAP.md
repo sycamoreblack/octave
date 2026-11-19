@@ -23,12 +23,20 @@ What a playthrough looks like today: describe a world → walk to four pillars o
 
 Not yet: rebinding controller buttons, and on-screen glyphs drawn as button icons instead of letters.
 
-## Phase 3 — A living story *(next)*
+## Phase 3 — A living story *(done, with two shapes deferred)*
 
-- **Talk freely with wanderers (Claude, optional).** Type anything; they answer in character, knowing the world, the relic and your progress. Falls back to scripted lines offline.
-- **Time passes (optional).** A slow day/night cycle, or "rest at a campfire" to change the hour. The world's described time stays the default.
-- **Restoration you can see.** After the finale, dead trees leaf out, lava cools, fog lifts, and new wanderers appear at the heart.
-- **More world shapes:** rivers that run downhill, caves, floating isles, and big settlements built from many hamlets.
+| # | Feature | Status |
+| --- | --- | --- |
+| 3.1 ✅ | **Talk freely with wanderers.** With a conversation server, the scripted lines lead into a text box. Replies stream in character, built from what that wanderer knows: the world, their own request, and live directions from where they stand. History is kept per wanderer. Offline or on a controller, wanderers keep their scripted lines. `WORLDSEED_MOCK_AI=1` gives canned replies for testing. | Done |
+| 3.2 ✅ | **Time passes (optional).** "Let time pass" (a 20-minute day) and "Jump to" an hour. Each world keeps its own sky tint at every hour. Sun, moonlight, fog and water follow, and the lantern lights itself at night. | Done |
+| 3.3 ✅ | **Restoration you can see.** Flowers spread out from the heart, dead trees leaf out, lava cools, murk clears, ash stops, storms stop flashing, and the wanderers gather at the heart. | Done |
+| 3.4 ◐ | **More world shapes.** Rivers that run downhill to the sea (water, lava or ice, or dry beds in canyons and deserts) and floating isles are done. Caves and large settlements are deferred: caves need a terrain representation beyond a heightfield, and settlements need their own layout pass. | Rivers and isles done |
+
+## Next ideas
+
+- Caves (a separate mesh layer under cliffs) and settlements (clusters of hamlets with paths between them).
+- Rebindable controller buttons, and button icons in hints.
+- Claude-written echoes that respond to what the player has already found.
 
 ## Principles
 

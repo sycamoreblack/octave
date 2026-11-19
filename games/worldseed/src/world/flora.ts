@@ -472,6 +472,7 @@ export function buildFlora(
       const keepOut =
         rule.collider || kind === 'rock' ? 1.6 : kind === 'grass' || kind === 'flower' ? 0.45 : 1
       if (pads.some((p) => Math.hypot(x - p.x, z - p.z) < p.r * keepOut)) continue
+      if (kind !== 'reeds' && kind !== 'rock' && terrain.rivers.near(x, z, 1.15)) continue
       if ((rule.collider || kind === 'rock') && colliders.occupied(x, z, 1)) continue
 
       let s = r.range(rule.scale[0], rule.scale[1])

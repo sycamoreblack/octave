@@ -128,6 +128,7 @@ export class Hud {
   }
 
   hideDialogue(): void {
+    document.getElementById('say-open')?.classList.add('hidden')
     this.showSay(false)
     this.setYouSaid('')
     this.dialogue.classList.add('hidden')

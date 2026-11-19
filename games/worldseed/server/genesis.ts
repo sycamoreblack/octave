@@ -42,7 +42,14 @@ const WorldSchema = z.object({
       .number()
       .describe('0..1 share of land under the liquid; 0.1 dry, 0.3 lakes, 0.6 archipelago'),
     plateaus: z.boolean().describe('stepped mesas and terraces'),
-    spires: z.boolean().describe('tall rock pillars scattered across the land')
+    spires: z.boolean().describe('tall rock pillars scattered across the land'),
+    rivers: z
+      .number()
+      .int()
+      .describe(
+        '0 to 3 rivers running from high ground to the sea (dry beds in canyons and deserts)'
+      ),
+    floating: z.boolean().describe('islands of rock and grass hanging in the sky')
   }),
   liquid: z
     .enum(LIQUIDS)

@@ -90,6 +90,7 @@ export class Renewal {
       const z = heart.z + Math.sin(a) * d
       if (!terrain.isDry(x, z, 0.6) || terrain.slopeAt(x, z) > 0.9) continue
       if (colliders.occupied(x, z, 0.4) || terrain.platformAt(x, z) > -Infinity) continue
+      if (terrain.rivers.near(x, z, 1.1)) continue
       dummy.position.set(x, terrain.groundAt(x, z) - 0.05, z)
       dummy.rotation.set(0, rng.range(0, Math.PI * 2), 0)
       dummy.scale.setScalar(rng.range(0.8, 1.5))

@@ -340,6 +340,8 @@ export class Game {
       // The Escape that released pointer lock may also arrive as a keypress: don't let it un-pause.
       else if (performance.now() - this.pausedAt > 300) this.closePanels()
     } else if (hit('photo') && this.mode === 'playing') this.setPhoto(true)
+    else if (this.talking && this.canChat() && this.input.pressed('Enter', 'NumpadEnter'))
+      this.enterChat(this.talking.index)
     else if (hit('interact') && this.mode === 'playing') this.interact()
   }
 
@@ -509,6 +511,7 @@ export class Game {
     lines.push(this.hintLine(w.position))
     this.talking = { index, line: 0, lines }
     this.hud.showDialogue(w.story.name, w.story.epithet, lines[0], this.input.label('interact'))
+    this.offerChat(index)
     this.audio.blip()
     if (first) {
       w.met = true
@@ -627,7 +630,6 @@ export class Game {
     this.talking.line++
     if (this.talking.line >= this.talking.lines.length) {
       // With a conversation server, the scripted lines lead into free talk (keyboard/touch only).
-      if (this.chatEnabled && this.input.device !== 'pad') return this.enterChat(this.talking.index)
       this.talking = null
       this.hud.hideDialogue()
       return
@@ -640,6 +642,7 @@ export class Game {
       this.input.label('interact')
     )
     this.audio.blip()
+    this.offerChat(this.talking.index)
   }
 
   // ---------------- free conversation ----------------
@@ -648,7 +651,20 @@ export class Game {
   chatEnabled = false
   private chatBusy = false
 
+  private canChat(): boolean {
+    return this.chatEnabled && this.input.device !== 'pad'
+  }
+
+  /** While a wanderer is talking, offer to talk back (Enter, or the button on touch). */
+  private offerChat(index: number): void {
+    const btn = document.getElementById('say-open') as HTMLButtonElement
+    btn.classList.toggle('hidden', !this.canChat())
+    btn.onclick = () => this.enterChat(index)
+    if (this.canChat()) this.hud.setMore(`${this.input.label('interact')} ▸ · Enter to talk`)
+  }
+
   private enterChat(index: number): void {
+    document.getElementById('say-open')!.classList.add('hidden')
     this.mode = 'chat'
     this.unlockPointer()
     const w = this.world.wanderers[index]
@@ -1204,7 +1220,10 @@ export class Game {
       const a = (k / 8) * Math.PI * 2
       if (t.groundAt(p.x + Math.cos(a) * 30, p.z + Math.sin(a) * 30) < t.liquidY - 0.5) wet++
     }
-    const nearLiquid = wet / 8
+    // A river close by sounds like gentle surf.
+    const river = t.riversDry ? null : t.rivers.nearest(p.x, p.z)
+    const riverNear = river ? 1 - Math.min(1, Math.max(0, (river.d - river.width) / 25)) : 0
+    const nearLiquid = Math.max(wet / 8, riverNear * 0.6)
     const liquid = this.spec.liquid
     const grassy =
       this.spec.flora.kinds.some((k) => k === 'grass' || k === 'flower' || k === 'reeds') &&

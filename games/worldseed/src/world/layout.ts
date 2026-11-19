@@ -40,7 +40,8 @@ const PAD_RADIUS: Record<Structure, number> = {
 export function planLayout(spec: WorldSpec, terrain: Terrain, rng: Rng): Layout {
   const liquid = terrain.liquidY
   const walkable = (x: number, z: number, margin = 2): boolean =>
-    terrain.solidLiquid ? true : terrain.naturalHeight(x, z) > liquid + margin
+    !terrain.rivers.near(x, z, 2.4) &&
+    (terrain.solidLiquid ? true : terrain.naturalHeight(x, z) > liquid + margin)
   const slope = (x: number, z: number): number => {
     const e = 4
     const dx = terrain.naturalHeight(x + e, z) - terrain.naturalHeight(x - e, z)

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Noise2D, clamp, lerp, smoothstep } from '../engine/noise'
 import { Rng } from '../engine/rng'
 import type { WorldSpec } from './spec'
+import { RiverNet } from './rivers'
 
 /** A walkable raised floor (a dais, stairs, a plinth): circle if r is set, else a rotated box. */
 export interface Platform {
@@ -69,6 +70,21 @@ export class Terrain {
     samples.sort((a, b) => a - b)
     const q = clamp(spec.terrain.waterLevel * 0.8, 0.02, 0.7)
     this.liquidY = samples[Math.floor(q * (samples.length - 1))]
+
+    this.rivers = new RiverNet(
+      spec.terrain.rivers ?? 0,
+      (x, z) => this.islandHeight(x, z),
+      this.liquidY,
+      LAND_RADIUS,
+      rng.fork('rivers')
+    )
+  }
+
+  readonly rivers: RiverNet
+
+  /** Rivers in dry places (canyons, deserts) are empty beds: the river that carved them is gone. */
+  get riversDry(): boolean {
+    return this.spec.biome === 'canyon' || this.spec.biome === 'desert'
   }
 
   /** Natural terrain before the island falloff and landmark pads. */
@@ -105,8 +121,13 @@ export class Terrain {
     return h
   }
 
-  /** baseHeight + coastline falloff. Used for layout before pads exist. */
+  /** Island height with river beds carved in. Used for layout before pads exist. */
   naturalHeight(x: number, z: number): number {
+    return this.rivers.carve(x, z, this.islandHeight(x, z))
+  }
+
+  /** baseHeight + coastline falloff, before rivers are carved. */
+  islandHeight(x: number, z: number): number {
     const h = this.baseHeight(x, z)
     const ragged = this.warp.fbm(Math.atan2(z, x) * 2 + 7, 3.3, 3) * 0.08
     const d = Math.sqrt(x * x + z * z) / LAND_RADIUS + ragged
@@ -169,7 +190,14 @@ export class Terrain {
   /** The natural surface: the ground, or the frozen/crusted liquid on top of it. */
   terrainSurfaceAt(x: number, z: number): number {
     const g = this.groundAt(x, z)
-    return this.solidLiquid ? Math.max(g, this.liquidY) : g
+    if (!this.solidLiquid) return g
+    let top = Math.max(g, this.liquidY)
+    // Frozen or crusted rivers carry you over the top too.
+    if (!this.riversDry) {
+      const r = this.rivers.nearest(x, z)
+      if (r && r.d < r.width * 1.2) top = Math.max(top, r.surface - 0.3)
+    }
+    return top
   }
 
   /** Top of the highest built floor at (x, z), or -Infinity. */
@@ -257,6 +285,12 @@ export class Terrain {
             c.snow,
             smoothstep(0.62, 0.75, frac + patch * 0.05) * (1 - smoothstep(0.9, 1.3, slope))
           )
+        const river = this.rivers.nearest(x, z)
+        if (river && river.d < river.width * 1.3) {
+          // River beds: pale pebbles and sand, darker where wet.
+          tmp.lerp(c.low, 0.65 * (1 - smoothstep(river.width * 0.8, river.width * 1.3, river.d)))
+          if (!this.riversDry && river.d < river.width) tmp.multiplyScalar(0.8)
+        }
         for (const pad of this.pads) {
           const d = Math.hypot(x - pad.x, z - pad.z)
           if (d < pad.r) tmp.lerp(c.stone, 0.18 * (1 - d / pad.r))

@@ -155,6 +155,10 @@ export interface WorldSpec {
     waterLevel: number
     plateaus: boolean
     spires: boolean
+    /** Rivers running from high ground to the sea (0–3). Optional in older specs. */
+    rivers?: number
+    /** Islands of rock and grass hanging in the sky. Optional in older specs. */
+    floating?: boolean
   }
   liquid: Liquid
   flora: { kinds: Flora[]; density: number }
@@ -281,7 +285,9 @@ export function normalizeSpec(raw: unknown, base: WorldSpec): WorldSpec {
       roughness: num(t.roughness, 0, 1, base.terrain.roughness),
       waterLevel: num(t.waterLevel, 0, 1, base.terrain.waterLevel),
       plateaus: typeof t.plateaus === 'boolean' ? t.plateaus : base.terrain.plateaus,
-      spires: typeof t.spires === 'boolean' ? t.spires : base.terrain.spires
+      spires: typeof t.spires === 'boolean' ? t.spires : base.terrain.spires,
+      rivers: Math.round(num(t.rivers, 0, 3, base.terrain.rivers ?? 0)),
+      floating: typeof t.floating === 'boolean' ? t.floating : (base.terrain.floating ?? false)
     },
     liquid: oneOf(LIQUIDS, r.liquid, base.liquid),
     flora: {

@@ -696,13 +696,41 @@ export function interpret(prompt: string): WorldSpec {
   if (/\b(flat|gentle|rolling|low|plains?)\b/.test(lower))
     terrain.height = Math.min(terrain.height, 0.3)
   if (/\b(mesas?|plateaus?|terrac\w*|tiers?|steps?|buttes?)\b/.test(lower)) terrain.plateaus = true
-  if (/\b(spires?|pillars?|needles?|hoodoos?|stacks?|floating|columns of rock)\b/.test(lower))
+  if (/\b(spires?|pillars?|needles?|hoodoos?|stacks?|columns of rock)\b/.test(lower))
     terrain.spires = true
-  if (/\b(lakes?|rivers?|flood\w*|drowned|sunken|waterlogged|waters?)\b/.test(lower))
+  if (/\b(lakes?|flood\w*|drowned|sunken|waterlogged|waters?)\b/.test(lower))
     terrain.waterLevel = Math.max(terrain.waterLevel, 0.42)
   if (/\b(islands?|archipelago\w*|isles?)\b/.test(lower))
     terrain.waterLevel = Math.max(terrain.waterLevel, 0.6)
   if (/\b(dry|arid|parched)\b/.test(lower)) terrain.waterLevel = Math.min(terrain.waterLevel, 0.1)
+  // Rivers: asked for by name, or sometimes by default where rivers belong.
+  const riverWords = lower.match(
+    /\b(rivers?|streams?|brooks?|creeks?|waterfalls?|rivulets?|rapids|deltas?)\b/g
+  )
+  const riverChance: Record<Biome, number> = {
+    meadow: 0.6,
+    forest: 0.6,
+    tundra: 0.5,
+    alien: 0.4,
+    volcanic: 0.5,
+    canyon: 0.8,
+    desert: 0.3,
+    swamp: 0,
+    islands: 0.2
+  }
+  terrain.rivers = riverWords
+    ? riverWords.some((w) => /(rivers|streams|brooks|creeks|rapids|deltas)$/.test(w))
+      ? 3
+      : 2
+    : rng.fork('rivers').chance(riverChance[biome])
+      ? 1
+      : 0
+  if (/\b(rivers?|streams?|brooks?|creeks?)\b/.test(negated)) terrain.rivers = 0
+  terrain.floating =
+    /\b(floating|levitating|hovering|sky[- ]islands?|islands? in the sky|suspended|airborne)\b/.test(
+      lower
+    ) ||
+    (biome === 'alien' && rng.fork('floating').chance(0.5))
 
   let liquid: Liquid = defaults.liquid
   if (/\b(lava|magma|molten)\b/.test(lower)) liquid = 'lava'

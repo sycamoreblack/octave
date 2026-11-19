@@ -29,7 +29,8 @@ WORLDSEED_AI=1 npm run dev
 ```
 
 - The key never reaches the browser. The page posts to `/api/genesis` on the Vite server (`server/genesis.ts`), and the server calls the API.
-- The server uses `claude-opus-5-5` by default (override with `WORLDSEED_MODEL`). Output is structured against a Zod schema, effort is `low` to keep loading fast, and server-side refusal fallbacks are turned on (`fallbacks: "default"`).
+- **Talking with wanderers.** With the same server, a wanderer's scripted lines lead into a text box. Type anything and they answer in character, word by word. Their replies draw on what they know: the world and its story, the thing they lost, and live directions from where they stand to each remaining light. The last few exchanges are remembered. Set `WORLDSEED_MOCK_AI=1` to try this offline with canned replies.
+- The server uses `claude-opus-5-5` by default (override with `WORLDSEED_MODEL`, or `WORLDSEED_CHAT_MODEL` for conversations). Output is structured against a Zod schema, effort is `low` to keep loading fast, and server-side refusal fallbacks are turned on (`fallbacks: "default"`).
 - Whatever comes back goes through `normalizeSpec()`. Any missing or invalid field is filled from the offline interpretation of the same words. If the call fails, the game says so and builds the world offline instead.
 - Claude worlds are saved whole, so returning to one costs nothing. Share links for them carry the full compressed world, not just the prompt.
 
@@ -75,7 +76,7 @@ The offline interpreter (`src/world/interpreter.ts`) reads keywords and phrases:
 - **Biome:** meadow, forest, desert, tundra, volcanic, swamp, islands, alien, canyon
 - **Time of day:** dawn, noon, dusk, night
 - **Weather:** rain, storm and lightning, snow, fog, ash, fireflies, spores, petals
-- **Terrain:** mountains, plateaus and mesas, rock spires, water level
+- **Terrain:** mountains, plateaus and mesas, rock spires, water level, rivers ("a winding river", "streams"), and floating isles ("islands floating in the sky")
 - **Liquid:** water, lava, ice or murk
 - **Plant kinds and density**
 - **Landmarks:** ruins, towers, stone circles, arches, lighthouses, fallen colossi, hamlets, shrines
@@ -103,6 +104,10 @@ src/
     flora.ts         instanced, chunked, wind-swayed vegetation
     sky.ts liquid.ts weather.ts fauna.ts beacon.ts npc.ts character.ts
     objectives.ts    waystones, seals, lost items, echoes, spot finding
+    rivers.ts        downhill river tracing, carving, spatial queries
+    features.ts      river water ribbons and floating isles
+    daycycle.ts      continuous sky for any hour, per-world tint
+    renewal.ts       bloom and leafing-out after the finale
     world.ts         assembles a scene from a WorldSpec
   engine/gamepad.ts  controller play and menu navigation (Gamepad API)
   story/
@@ -114,12 +119,15 @@ src/
   ui/  hud.ts map.ts
   engine/  rng, noise, colour, geometry helpers, input, audio, colliders, wind
 server/genesis.ts    Vite middleware for /api/status and /api/genesis
+server/talk.ts       /api/talk: streamed in-character conversation
 ```
 
 Notes:
 
 - **Physics matches the picture.** Ground height is read from the baked grid using the mesh's own triangle split, so feet sit on the rendered surface. Dais steps, stairs and plinths are registered as walkable platforms.
 - **Performance.** Plants are instanced per spatial chunk, so the camera and the shadow camera can cull whole groves. Weather particles move entirely on the GPU. The far plane follows fog density. Phones default to Low quality, and auto-detail handles slow devices.
+- **Time.** Worlds stay at the hour they were described unless you turn on **Let time pass** (a 20-minute day) or use **Jump to** in the pause menu. Each world keeps its own sky tint at every hour.
+- **After the finale.** Flowers spread out from the heart, dead trees leaf out, lava cools, murky water clears, ash stops falling, and the wanderers gather at the heart.
 - **Sound by place.** All sound is generated at runtime. On top of the mood-based music, surf swells near open water, lava rumbles, crickets chirp in grassy places at night, frogs croak in the fens, and birds sing by day where there are birds. Wind gets stronger with altitude.
 - **Saving.** Progress (pieces found, places discovered, people met, journal, explored map, position) autosaves to `localStorage` per world. The title screen lists your worlds to continue or forget.
 - **Robustness.** Storage access is guarded everywhere. Specs from Claude, share links and old saves all pass through `normalizeSpec()`.
