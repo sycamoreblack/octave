@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0d0f16" />
+    <meta
+      name="description"
+      content="Describe a world, then walk through it. A third-person, procedurally generated exploration game with a story in every world."
+    />
+    <title>Worldseed</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4 44 32 32 60 20 32Z' fill='%23ffd27a'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view" aria-label="Game view"></canvas>
+
+    <section id="title" class="screen">
+      <div class="title-inner">
+        <h1>Worldseed</h1>
+        <p class="tag">Describe a world. Then walk into it.</p>
+        <label for="prompt" class="sr-only">Describe your world</label>
+        <textarea
+          id="prompt"
+          maxlength="600"
+          rows="3"
+          placeholder="A drowned archipelago at dusk, where old lighthouses guard forgotten songs…"
+        ></textarea>
+        <div class="chips" id="examples" aria-label="Example worlds"></div>
+        <div class="row">
+          <button id="begin" class="primary">Begin</button>
+          <button id="surprise">Surprise me</button>
+        </div>
+        <label class="ai-row" id="ai-row" hidden>
+          <input type="checkbox" id="use-ai" />
+          <span>Let Claude dream up this world <em>(slower, richer story)</em></span>
+        </label>
+        <div id="recent" class="recent"></div>
+        <p class="keys">
+          <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump, hold to glide ·
+          <kbd>E</kbd> interact · <kbd>J</kbd> journal · <kbd>M</kbd> map · <kbd>Esc</kbd> pause
+        </p>
+      </div>
+    </section>
+
+    <section id="loading" class="screen hidden" aria-live="polite">
+      <div class="loading-inner">
+        <p class="loading-prompt"></p>
+        <div class="bar"><i></i></div>
+        <p class="stage"></p>
+      </div>
+    </section>
+
+    <section id="card" class="screen card hidden" role="dialog" aria-modal="true">
+      <div class="card-inner">
+        <p class="kicker"></p>
+        <h2></h2>
+        <p class="epigraph"></p>
+        <div class="body"></div>
+        <div class="card-actions"><button class="primary" id="card-ok">Continue</button></div>
+      </div>
+    </section>
+
+    <div id="hud" class="hidden">
+      <div id="compass">
+        <div id="compass-strip"></div>
+        <div class="tick"></div>
+      </div>
+      <div id="objective"><span class="count"></span><span class="text"></span></div>
+      <div id="carry" class="hidden"></div>
+      <div id="banner"><small></small><span></span></div>
+      <div id="hint"></div>
+      <div id="dialogue" class="hidden">
+        <div class="who"><b></b><span></span></div>
+        <p class="you hidden"></p>
+        <p class="line"></p>
+        <button id="say-open" class="hidden" type="button">Say something…</button>
+        <form id="say" class="hidden" autocomplete="off">
+          <input
+            id="say-input"
+            maxlength="300"
+            placeholder="Say something…"
+            aria-label="Say something"
+          />
+          <button type="submit">Say</button>
+        </form>
+        <div class="more">E ▸</div>
+      </div>
+      <div id="clickhint">Click to look around</div>
+      <div id="touch-ui">
+        <div id="touch-stick"><div id="touch-knob"></div></div>
+        <button id="touch-run" aria-label="Run">⇧</button>
+        <button id="touch-jump" aria-label="Jump">⤒</button>
+        <button id="touch-act" aria-label="Interact">E</button>
+        <button id="touch-menu" aria-label="Menu">☰</button>
+      </div>
+    </div>
+
+    <div id="toasts" aria-live="polite"></div>
+
+    <div id="photo-bar" class="hidden" role="status">
+      <b>Photo mode</b>
+      <span id="photo-keys"></span>
+      <span id="photo-status"></span>
+    </div>
+    <div id="photo-flash" aria-hidden="true"></div>
+
+    <section id="journal" class="panel hidden" role="dialog" aria-label="Journal">
+      <header>
+        <h2>Journal</h2>
+        <button class="close" data-close>✕</button>
+      </header>
+      <div class="journal-body"></div>
+    </section>
+
+    <section id="map" class="panel hidden" role="dialog" aria-label="Map">
+      <header>
+        <h2 id="map-title">Map</h2>
+        <button class="close" data-close>✕</button>
+      </header>
+      <canvas id="map-canvas" width="768" height="768"></canvas>
+    </section>
+
+    <section id="pause" class="panel hidden" role="dialog" aria-label="Paused">
+      <header>
+        <h2>Paused</h2>
+        <button class="close" data-close>✕</button>
+      </header>
+      <div class="pause-body">
+        <div class="pause-actions">
+          <button class="primary" id="resume">Resume</button>
+          <button id="open-journal">Journal <kbd>J</kbd></button>
+          <button id="open-map">Map <kbd>M</kbd></button>
+          <button id="photo">Photo mode <kbd>F</kbd></button>
+          <button id="share">Copy link to this world</button>
+          <button id="new-world">New world</button>
+          <h3 class="settings-head">Time</h3>
+          <label class="check"
+            ><input type="checkbox" id="set-time" /> Let time pass (a day lasts 20 minutes)</label
+          >
+          <label class="field"
+            >Jump to
+            <select id="set-hour">
+              <option value="">Choose an hour…</option>
+              <option value="0.27">Dawn</option>
+              <option value="0.4">Morning</option>
+              <option value="0.5">Noon</option>
+              <option value="0.6">Afternoon</option>
+              <option value="0.74">Dusk</option>
+              <option value="0.95">Night</option>
+            </select>
+          </label>
+        </div>
+        <div class="settings">
+          <label
+            >Quality
+            <select id="set-quality">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label>Volume <input type="range" id="set-volume" min="0" max="1" step="0.05" /></label>
+          <label>Music <input type="range" id="set-music" min="0" max="1" step="0.05" /></label>
+          <label
+            >Look speed <input type="range" id="set-sens" min="0.3" max="2.5" step="0.1"
+          /></label>
+          <label class="check"><input type="checkbox" id="set-invert" /> Invert look</label>
+          <label class="check"
+            ><input type="checkbox" id="set-auto" /> Lower detail automatically if it
+            stutters</label
+          >
+          <p class="small" id="quality-note">Quality changes apply to the next world you load.</p>
+          <h3 class="settings-head">Accessibility</h3>
+          <label class="check"><input type="checkbox" id="set-large" /> Larger text</label>
+          <label class="check"><input type="checkbox" id="set-contrast" /> High-contrast HUD</label>
+          <label class="check"
+            ><input type="checkbox" id="set-calm" /> Reduce flashes and camera motion</label
+          >
+          <h3 class="settings-head">Controls</h3>
+          <div id="bindings" class="bindings"></div>
+          <button id="reset-keys" class="small-btn">Reset keys</button>
+          <p class="small">
+            Controllers work too: left stick moves, right stick looks, A jumps, X interacts.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
