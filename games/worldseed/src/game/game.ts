@@ -10,6 +10,8 @@ import { Player } from './player'
 import { FollowCamera } from './camera'
 import { Hud, esc, type CompassMark } from '../ui/hud'
 import { WorldMap } from '../ui/map'
+import { PostFX } from '../graphics/post'
+import { SkyEnvironment } from '../graphics/environment'
 import {
   emptyProgress,
   storeSave,
@@ -164,6 +166,7 @@ export class Game {
 
     // Compile shaders and upload buffers before the first visible frame.
     this.follow.update(0.016, this.input, this.player.position, this.player.facing, 0)
+    this.setupGraphics(q)
     this.renderer.compile(this.world.scene, this.camera)
   }
 
@@ -267,10 +270,11 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop)
     const raw = this.clock.getDelta()
     const dt = Math.min(0.05, raw)
+    this.lastDt = dt
     this.time += dt
     this.watchPerformance(raw)
     this.update(dt)
-    this.renderer.render(this.world.scene, this.camera)
+    this.renderFrame()
     this.input.endFrame()
   }
 
@@ -318,6 +322,8 @@ export class Game {
       )
     )
     this.audio.update(dt, alt, this.spec.weather === 'storm' ? 2 : 1)
+
+    if (this.env) this.world.scene.environment = this.env.update(this.envKey(), this.time)
 
     this.saveTimer += dt
     if (this.saveTimer > 12 && playing) this.save()
@@ -1080,6 +1086,7 @@ export class Game {
   resize(): void {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
+    this.post?.setSize()
   }
 
   applySettings(s: Settings): void {
@@ -1091,6 +1098,36 @@ export class Game {
     }
     this.world.reduceFlashes = s.reduceMotion
     if (!s.autoQuality) this.perf.samples = []
+  }
+
+  /** Draw one frame. (Also used by the benchmark harness.) */
+  renderFrame(): void {
+    if (this.post) this.post.render(this.lastDt)
+    else this.renderer.render(this.world.scene, this.camera)
+  }
+
+  // ---------------- graphics ----------------
+
+  private post: PostFX | null = null
+  private env: SkyEnvironment | null = null
+  private lastDt = 1 / 60
+
+  /** Sky lighting and post-processing, per the quality preset. */
+  private setupGraphics(q: (typeof QUALITY)['high']): void {
+    if (q.ibl) {
+      this.env = new SkyEnvironment(this.renderer, this.world.sky.mesh.material as THREE.Material)
+      this.world.scene.environment = this.env.update(this.envKey(), 0, true)
+      this.world.scene.environmentIntensity = 1
+      this.world.setSkyLighting(true)
+    }
+    if (q.post !== 'none')
+      this.post = new PostFX(this.renderer, this.world.scene, this.camera, q.post)
+    else this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+  }
+
+  /** Coarse fingerprint of the light, so the sky capture only reruns when it really changed. */
+  private envKey(): string {
+    return `${this.world.timeOfDay.toFixed(3)}|${this.world.restoration.toFixed(2)}`
   }
 
   /** Jump (or step) to a time of day, updating everything that depends on light. */
@@ -1123,6 +1160,9 @@ export class Game {
     const q = QUALITY[this.settings.quality]
     const ratio = [q.pixelRatio, Math.min(q.pixelRatio, 1.25), 1, 0.75][this.perf.level]
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, ratio))
+    this.post?.setSize()
+    // Ambient occlusion is the most expensive pass; it goes with the shadows.
+    if (this.perf.level >= 2) this.post?.setAO(false)
     if (this.perf.level >= 2 && this.world.sun.castShadow) {
       this.world.sun.castShadow = false
       this.renderer.shadowMap.enabled = false
@@ -1163,7 +1203,7 @@ export class Game {
 
   /** Save the current view as a PNG with the world's name in the corner. */
   private async capture(): Promise<void> {
-    this.renderer.render(this.world.scene, this.camera)
+    this.renderFrame()
     const src = this.renderer.domElement
     const out = document.createElement('canvas')
     out.width = src.width
@@ -1264,6 +1304,9 @@ export class Game {
     this.hud.setHint('')
     this.closePanels(false)
     this.hud.show(false)
+    this.post?.dispose()
+    this.env?.dispose()
+    this.world.scene.environment = null
     this.world.dispose()
   }
 }

@@ -32,6 +32,17 @@ Not yet: rebinding controller buttons, and on-screen glyphs drawn as button icon
 | 3.3 ✅ | **Restoration you can see.** Flowers spread out from the heart, dead trees leaf out, lava cools, murk clears, ash stops, storms stop flashing, and the wanderers gather at the heart. | Done |
 | 3.4 ◐ | **More world shapes.** Rivers that run downhill to the sea (water, lava or ice, or dry beds in canyons and deserts) and floating isles are done. Caves and large settlements are deferred: caves need a terrain representation beyond a heightfield, and settlements need their own layout pass. | Rivers and isles done |
 
+## Graphics pass *(in progress — see docs/HANDOFF-graphics.md)*
+
+Done:
+- Height fog with sun in-scattering.
+- A procedural cloud layer.
+- Terrain surface detail.
+- Sky-based ambient light (IBL).
+- Post-processing: ambient occlusion, bloom, grading, SMAA.
+
+Open: snow particles bloom too much, the alien sky is washed out, a tuning pass across biomes, and like-for-like performance numbers.
+
 ## Next ideas
 
 - Caves (a separate mesh layer under cliffs) and settlements (clusters of hamlets with paths between them).

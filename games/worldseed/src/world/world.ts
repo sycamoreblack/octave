@@ -18,6 +18,7 @@ import { Renewal } from './renewal'
 import { buildFloatingIsles, buildRivers, type IslesRig, type RiverRig } from './features'
 import { LAND_RADIUS } from './terrain'
 import { measureShift, worldSkyAt, type SkyShift } from './daycycle'
+import { setAtmosphere } from '../graphics/atmosphere'
 
 export interface Quality {
   /** Multiplier on flora/particle counts. */
@@ -26,12 +27,40 @@ export interface Quality {
   shadows: boolean
   shadowSize: number
   pixelRatio: number
+  /** Image-based lighting from the sky (and PBR plants). */
+  ibl: boolean
+  /** Post-processing: none, basic (AA, bloom, grade), or full (+ ambient occlusion). */
+  post: 'none' | 'basic' | 'full'
 }
 
 export const QUALITY: Record<'low' | 'medium' | 'high', Quality> = {
-  low: { detail: 0.35, terrainRes: 200, shadows: false, shadowSize: 1024, pixelRatio: 1 },
-  medium: { detail: 0.7, terrainRes: 280, shadows: true, shadowSize: 2048, pixelRatio: 1.5 },
-  high: { detail: 1, terrainRes: 340, shadows: true, shadowSize: 2048, pixelRatio: 2 }
+  low: {
+    detail: 0.35,
+    terrainRes: 200,
+    shadows: false,
+    shadowSize: 1024,
+    pixelRatio: 1,
+    ibl: false,
+    post: 'none'
+  },
+  medium: {
+    detail: 0.7,
+    terrainRes: 280,
+    shadows: true,
+    shadowSize: 2048,
+    pixelRatio: 1.5,
+    ibl: true,
+    post: 'basic'
+  },
+  high: {
+    detail: 1,
+    terrainRes: 340,
+    shadows: true,
+    shadowSize: 2048,
+    pixelRatio: 2,
+    ibl: true,
+    post: 'full'
+  }
 }
 
 export interface ShardNode {
@@ -239,7 +268,14 @@ export class World {
           )
     this.scene.add(fill)
     this.fill = fill
+    this.fillBase = fill.intensity
     this.skyShift = measureShift(spec.palette, spec.timeOfDay)
+    this.updateClouds(
+      new THREE.Color(spec.palette.skyTop),
+      new THREE.Color(spec.palette.skyHorizon),
+      new THREE.Color(spec.palette.sun),
+      this.sky.night
+    )
     this.baseColors = {
       top: (this.sky.uniforms.uTop.value as THREE.Color).clone(),
       horizon: (this.sky.uniforms.uHorizon.value as THREE.Color).clone(),
@@ -476,9 +512,10 @@ export class World {
         flash.value = this.reduceFlashes ? 0.08 : 0.9
         this.onLightning?.()
       }
-      this.hemi.intensity = this.hemiBase * 0.55 + (flash.value as number) * 2
+      this.hemi.intensity = this.hemiBase * this.hemiScale * 0.55 + (flash.value as number) * 2
     }
 
+    this.updateAtmosphere()
     this.renewal.update(this.restoration)
     this.liquid.uniforms.uRenew.value = this.restoration
     if (this.weather && this.weather.kind === 'ash') {
@@ -498,7 +535,7 @@ export class World {
         .lerp(warm, r * 0.3)
       this.hemi.color.copy(this.baseColors.hemiSky).lerp(warm, r * 0.2)
       // A restored land is a brighter one.
-      this.hemi.intensity = this.hemiBase * (1 + 0.3 * r)
+      this.hemi.intensity = this.hemiBase * this.hemiScale * (1 + 0.3 * r)
       const fog = this.scene.fog as THREE.FogExp2
       fog.density = this.fogBase * (1 - r * 0.45)
       fog.color.copy(this.sky.uniforms.uHorizon.value as THREE.Color)
@@ -511,6 +548,80 @@ export class World {
   river: RiverRig | null = null
   private isles: IslesRig | null = null
   private hemiBase = 1
+  /** Lower when sky lighting (IBL) supplies the ambient light instead. */
+  private hemiScale = 1
+
+  /** Hand ambient light over to the sky environment map (or back). */
+  setSkyLighting(on: boolean): void {
+    this.hemiScale = on ? 0.4 : 1
+    this.hemi.intensity = this.hemiBase * this.hemiScale
+    this.fillScale = on ? 0.5 : 1
+    this.fill.intensity = this.fillBase * this.fillScale
+  }
+  private fillBase = 0.3
+  private fillScale = 1
+
+  private atmoColor = new THREE.Color()
+
+  /** Cloud colours for the current sky: bright and soft by day, warm at dusk, dim at night. */
+  private updateClouds(
+    top: THREE.Color,
+    horizon: THREE.Color,
+    sunColor: THREE.Color,
+    night: number
+  ): void {
+    const u = this.sky.uniforms
+    const cover: Record<string, number> = {
+      clear: 0.5,
+      rain: 0.72,
+      storm: 0.86,
+      snow: 0.66,
+      fog: 0.6,
+      ash: 0.62,
+      fireflies: 0.3,
+      spores: 0.32,
+      petals: 0.42
+    }
+    u.uCloudCover.value = (cover[this.spec.weather] ?? 0.4) * (1 - 0.35 * this.restoration)
+    const lit = u.uCloudLit.value as THREE.Color
+    const shade = u.uCloudShade.value as THREE.Color
+    const grey =
+      this.spec.weather === 'storm' || this.spec.weather === 'ash'
+        ? 0.55
+        : this.spec.weather === 'rain'
+          ? 0.75
+          : 1
+    lit
+      .copy(horizon)
+      .lerp(new THREE.Color('#ffffff'), 0.55)
+      .lerp(sunColor, 0.25)
+      .multiplyScalar(grey * (1 - 0.82 * night))
+    shade
+      .copy(top)
+      .lerp(horizon, 0.5)
+      .multiplyScalar(0.75 * grey * (1 - 0.6 * night))
+  }
+
+  /** Feed the shared fog uniforms: where the light is, its colour, and how mist sits on this land. */
+  private updateAtmosphere(): void {
+    const day = THREE.MathUtils.smoothstep(this.sky.sunDir.y, -0.05, 0.2)
+    this.atmoColor.copy(this.sun.color)
+    const t = this.terrain
+    const heavy =
+      this.spec.biome === 'swamp' || this.spec.weather === 'fog'
+        ? 0.85
+        : this.spec.biome === 'islands'
+          ? 0.75
+          : 0.6
+    setAtmosphere({
+      sunDir: this.sky.lightDir,
+      sunColor: this.atmoColor,
+      glow: 0.25 + 0.5 * day,
+      referenceHeight: t.liquidY + t.amp * 0.25,
+      relief: t.amp,
+      heightAmount: heavy
+    })
+  }
 
   /** After the finale, the wanderers come to stand around the heart. */
   gatherWanderers(): void {
@@ -556,15 +667,16 @@ export class World {
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sky.lightDir, 200)
 
     const low = 1 - THREE.MathUtils.smoothstep(sunDir.y, 0.05, 0.4)
-    this.hemi.intensity = THREE.MathUtils.lerp(1.7 + low * 0.9, 1.5, night) * (1 + 0.3 * night)
-    this.hemiBase = this.hemi.intensity
+    this.hemiBase = THREE.MathUtils.lerp(1.7 + low * 0.9, 1.5, night) * (1 + 0.3 * night)
+    this.hemi.intensity = this.hemiBase * this.hemiScale
     this.hemi.color
       .copy(top)
       .lerp(horizon, 0.5)
       .lerp(new THREE.Color('#7f96d8'), 0.6 * night)
     if (spec.liquid !== 'lava') {
       this.fill.color.copy(horizon).lerp(new THREE.Color('#ffffff'), 0.5)
-      this.fill.intensity = THREE.MathUtils.lerp(0.3, 0.45, night)
+      this.fillBase = THREE.MathUtils.lerp(0.3, 0.45, night)
+      this.fill.intensity = this.fillBase * this.fillScale
     }
 
     if (this.baseColors) {
@@ -581,6 +693,7 @@ export class World {
     fog.color.copy(horizon)
     ;(this.scene.background as THREE.Color).copy(horizon)
 
+    this.updateClouds(top, horizon, sunColor, night)
     const lu = this.liquid.uniforms
     ;(lu.uSunDir.value as THREE.Vector3).copy(sunDir)
     ;(lu.uSunColor.value as THREE.Color).copy(sunColor)

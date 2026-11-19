@@ -438,11 +438,20 @@ export function buildFlora(
             roughness: 0.25,
             metalness: 0.1
           })
-        : new THREE.MeshLambertMaterial({
-            vertexColors: true,
-            flatShading: true,
-            side: kind === 'grass' || kind === 'willow' ? THREE.DoubleSide : THREE.FrontSide
-          })
+        : quality >= 0.6
+          ? // Medium/High: physically based, so plants take ambient light from the sky like everything else.
+            new THREE.MeshStandardMaterial({
+              vertexColors: true,
+              flatShading: true,
+              roughness: 0.85,
+              metalness: 0,
+              side: kind === 'grass' || kind === 'willow' ? THREE.DoubleSide : THREE.FrontSide
+            })
+          : new THREE.MeshLambertMaterial({
+              vertexColors: true,
+              flatShading: true,
+              side: kind === 'grass' || kind === 'willow' ? THREE.DoubleSide : THREE.FrontSide
+            })
     if (rule.sway > 0) addWind(mat, kind === 'mushroom' && giant > 1 ? rule.sway / 20 : rule.sway)
 
     // Instances are bucketed into spatial chunks so each chunk can be frustum-culled

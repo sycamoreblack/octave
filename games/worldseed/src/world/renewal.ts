@@ -73,7 +73,7 @@ export class Renewal {
       part(new THREE.ConeGeometry(0.12, 0.25, 3), '#5f9a46', xf(0.08, 0.15, 0, 0, 0, -0.6))
     ])
     const mat = growable(
-      new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+      new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 }),
       this.grow,
       new THREE.Vector3(0, 0, 0)
     )
@@ -126,7 +126,7 @@ export class Renewal {
       )
     ])
     const mat = growable(
-      new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+      new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 }),
       this.grow,
       new THREE.Vector3(0, 4.2, 0)
     )

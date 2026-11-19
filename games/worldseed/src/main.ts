@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { installAtmosphere } from './graphics/atmosphere'
 import { ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS, Input, keyName } from './engine/input'
 import { GamepadInput } from './engine/gamepad'
 import { AudioEngine } from './engine/audio'
@@ -22,6 +23,9 @@ import {
 } from './game/save'
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => document.querySelector<T>(sel)!
+
+// Must run before any material compiles: it replaces three.js's fog shader chunks.
+installAtmosphere()
 
 const canvas = $<HTMLCanvasElement>('#view')
 let renderer: THREE.WebGLRenderer

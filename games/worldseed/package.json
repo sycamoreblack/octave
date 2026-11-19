@@ -13,6 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "n8ao": "^2.1.0",
+    "postprocessing": "^6.39.6",
     "three": "^0.182.0"
   },
   "devDependencies": {

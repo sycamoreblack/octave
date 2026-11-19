@@ -3,6 +3,7 @@ import { Noise2D, clamp, lerp, smoothstep } from '../engine/noise'
 import { Rng } from '../engine/rng'
 import type { WorldSpec } from './spec'
 import { RiverNet } from './rivers'
+import { addGroundDetail } from '../graphics/surface'
 
 /** A walkable raised floor (a dais, stairs, a plinth): circle if r is set, else a rotated box. */
 export interface Platform {
@@ -330,12 +331,14 @@ export class Terrain {
     geo.computeVertexNormals()
     geo.computeBoundingSphere()
 
-    const mat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      flatShading: true,
-      roughness: 0.95,
-      metalness: 0
-    })
+    const mat = addGroundDetail(
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        flatShading: true,
+        roughness: 0.95,
+        metalness: 0
+      })
+    )
     const mesh = new THREE.Mesh(geo, mat)
     mesh.receiveShadow = true
     mesh.name = 'terrain'

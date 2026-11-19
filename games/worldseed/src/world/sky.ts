@@ -51,6 +51,9 @@ uniform float uAurora;
 uniform vec3 uAuroraA;
 uniform vec3 uAuroraB;
 uniform float uFlash;
+uniform float uCloudCover;
+uniform vec3 uCloudLit;
+uniform vec3 uCloudShade;
 varying vec3 vDir;
 
 float hash(vec3 p) {
@@ -113,6 +116,23 @@ void main() {
     col += mix(uAuroraA, uAuroraB, vnoise(p * 1.3)) * curtain * uAurora * 0.8;
   }
 
+  // Clouds: a drifting noise layer on a curved sky plane. A second sample nudged toward the
+  // sun gives each cloud a lit side and a shadowed underside; edges glow when backlit.
+  if (uCloudCover > 0.0 && y > 0.0) {
+    vec2 cp = d.xz / (y + 0.12) * 1.3 + vec2(uTime * 0.006, uTime * 0.0025);
+    float n = vnoise(cp) * 0.5 + vnoise(cp * 2.03 + 7.1) * 0.27 + vnoise(cp * 4.1 - 3.3) * 0.15 + vnoise(cp * 8.3 + 1.7) * 0.08;
+    float cover = smoothstep(1.0 - uCloudCover, 1.0 - uCloudCover + 0.32, n);
+    if (cover > 0.001) {
+      vec2 toSun = normalize(uSunDir.xz + vec2(1e-4)) * 0.09;
+      float n2 = vnoise(cp + toSun) * 0.5 + vnoise((cp + toSun) * 2.03 + 7.1) * 0.27 + vnoise((cp + toSun) * 4.1 - 3.3) * 0.15;
+      float lit = clamp(0.55 + (n - n2) * 4.0, 0.0, 1.0);
+      vec3 cloud = mix(uCloudShade, uCloudLit, lit);
+      cloud += uSunColor * pow(sd, 5.0) * (1.0 - cover) * 0.9 * sunVisible;
+      float fade = smoothstep(0.0, 0.18, y);
+      col = mix(col, cloud, cover * fade * 0.92);
+    }
+  }
+
   col += vec3(0.8, 0.85, 1.0) * uFlash;
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -150,7 +170,10 @@ export function buildSky(spec: WorldSpec, rng: Rng): SkyRig {
     uAurora: { value: spec.aurora ? 1 : 0 },
     uAuroraA: { value: new THREE.Color('#3dffa8') },
     uAuroraB: { value: new THREE.Color(spec.palette.accent).lerp(new THREE.Color('#8a5cff'), 0.5) },
-    uFlash: { value: 0 }
+    uFlash: { value: 0 },
+    uCloudCover: { value: 0 },
+    uCloudLit: { value: new THREE.Color('#ffffff') },
+    uCloudShade: { value: new THREE.Color('#888888') }
   }
   const mat = new THREE.ShaderMaterial({
     uniforms,
